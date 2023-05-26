@@ -42,7 +42,16 @@ The final chunk may be below the stated Chunk Size.
 
 The 6-byte **header** (before encryption):
 
-`[ 4 bytes: Chunk Size (int32 (NOT uint32; the left-most bit of the left-most byte must never be set to 1), big endian) || 2 bytes: message type (uint16, big endian) (see below) ]`
+`[ 4 bytes: Chunk Size (int32 (NOT uint32; see below), big endian) || 2 bytes: message type (int16 (NOT uint16; see below), big endian) (see next section) ]`
+
+Chunk Size is an int32, _not_ a uint32.  This is to prevent accidental
+overflows when implementing miniLeap in languages that have 32-bit
+ints even on 64-bit systems (e.g., Java).  Thus, Chunk Size's
+left-most bit of its left-most byte must never be set to 1.
+
+Similar logic for the message type; it is an int16, _not_ a uint16,
+and thus its left-most bit of its left-most byte must never be set to
+-- you guessed it -- 1.
 
 Min permitted Chunk Size: 1,024 bytes.  Consider choosing ~64KB if you
 need random access (to download/decrypt less data), and ~1MB if you
@@ -50,9 +59,9 @@ don't (to perform fewer encryptions/decryptions).  As stated above,
 the last chunk may be smaller than this, but the others may not be
 (except the header, obviously, which is small and of fixed size).
 
-Max chunk size: (256**4)/2 - 1 bytes == 2,147,483,647 == ~2.15GB
+Max chunk size: 2**31 - 1 == (256**4)/2 - 1 bytes == 2,147,483,647 == ~2.15GB
 
-Total possible miniLeap message types: 256**2 == 65,536
+Total possible miniLeap message types: 2**15 == (256**2)/2 == 32,768 (0 through 32,767)
 
 
 #### Message Types
@@ -71,7 +80,7 @@ Total possible miniLeap message types: 256**2 == 65,536
 
 6: File with file path, not just filename + body (details TBD)
 
-7 through 65,535: Reserved for future assignment; please submit a PR to propose a new message type
+7 through 32,767: Reserved for future assignment; please submit a PR to propose a new message type
 
 
 #### Future Enhancements Under Consideration
