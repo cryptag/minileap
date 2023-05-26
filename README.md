@@ -1,7 +1,9 @@
 # miniLeap
 
-miniLeap is a simple streaming encryption scheme built on
-NaCl/libsodium's SecretBox.
+miniLeap is a command line tool, encryption library, and simple
+streaming encryption scheme built on NaCl/libsodium's SecretBox but
+without the complexity of libsodium 1.0.14+'s secretstream.
+
 
 #### Design
 
