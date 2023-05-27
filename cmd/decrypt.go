@@ -107,39 +107,15 @@ var decryptCmd = &cobra.Command{
 				DecryptHeaderLength, n))
 		}
 
-		// noncePlusEncryptedHeaderWithoutHash := noncePlusEncryptedHeaderPlusHash[:len(noncePlusEncryptedHeaderPlusHash)-Blake2bHashLength]
-		// headerHash := noncePlusEncryptedHeaderPlusHash[len(noncePlusEncryptedHeaderPlusHash)-Blake2bHashLength:]
-
-		// blake.Write(noncePlusEncryptedHeaderWithoutHash)
-
-		// blakeHeaderSum := blake.Sum(nil)
-
-		// if subtle.ConstantTimeCompare(headerHash, blakeHeaderSum) == 0 {
-		// 	exit(fmt.Errorf("Header verification failed; Blake2b checksum is incorrect; got %v, wanted %v\n", headerHash, blakeHeaderSum))
-		// }
-
-		// Header Blake2s hash verification: successful! :tada:
-
-		// blake.Write(blakeHeaderSum)
-
-		// fmt.Printf("About to run DecryptAndVerifyChunk(...) on header\n")
-
 		header, err := DecryptAndVerifyChunk(noncePlusEncryptedHeaderPlusHash, KeyPairPrivate32, blake)
 		if err != nil {
 			exit(err)
 		}
 
-		fmt.Printf("\n  !!! DecryptAndVerifyChunk(header) WORKED\n\n")
-
-		// fmt.Printf("About to run ParseDecryptedHeaderIntoValidFields(...)\n")
-
 		chunkSize, msgType, err := ParseDecryptedHeaderIntoValidFields(header)
 		if err != nil {
 			exit(err)
 		}
-
-		fmt.Printf("chunkSize == %v\n", chunkSize)
-		fmt.Printf("msgType   == %v\n", msgType)
 
 		if msgType != MessageTypeFileWithFilename {
 			exit(fmt.Errorf("TEMPORARY: Got msgType == %v, wanted %v\n",
@@ -162,8 +138,6 @@ var decryptCmd = &cobra.Command{
 				break
 			}
 
-			fmt.Printf("Read %v bytes into noncePlusEncryptedChunkPlusHash\n", n)
-
 			if n == Sha512HashLength {
 				sha512Wanted = noncePlusEncryptedChunkPlusHash[:n]
 				break
@@ -175,24 +149,14 @@ var decryptCmd = &cobra.Command{
 
 			endOfFile := (err == io.EOF)
 
-			fmt.Printf("endOfFile == %v\n", endOfFile)
-
 			if i == 0 && n < chunkSize {
 				// One-chunk message!
-				fmt.Printf("Special case: one-chunk message; n == %v\n", n)
-
 				nonceChunkHash := noncePlusEncryptedChunkPlusHash[:n]
-
-				fmt.Printf("\nnonceChunkHash full (%v bytes):\n    %v\n\n", len(nonceChunkHash), nonceChunkHash)
-				fmt.Printf("nonceChunkHash minus ending (%v bytes):\n    %v\n\n", len(nonceChunkHash[:len(nonceChunkHash)-Sha512HashLength]), nonceChunkHash[:len(nonceChunkHash)-Sha512HashLength])
-				fmt.Printf("Therefore, last 64 bytes (actually %v):\n    %v\n\n", len(nonceChunkHash[len(nonceChunkHash)-Sha512HashLength:]), nonceChunkHash[len(nonceChunkHash)-Sha512HashLength:])
 
 				decryptedChunk, err := DecryptAndVerifyChunk(nonceChunkHash[:len(nonceChunkHash)-Sha512HashLength], KeyPairPrivate32, blake)
 				if err != nil {
 					exit(err)
 				}
-
-				fmt.Printf("decryptedChunk == `%s`\n", decryptedChunk)
 
 				_, err = plainFile.Write(decryptedChunk)
 				if err != nil {
@@ -204,8 +168,6 @@ var decryptCmd = &cobra.Command{
 
 				break
 			}
-
-			fmt.Printf("  !!! PAST the special case!\n")
 
 			decryptedChunk, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash[:n], KeyPairPrivate32, blake)
 			if err != nil {
@@ -224,8 +186,6 @@ var decryptCmd = &cobra.Command{
 			}
 		}
 
-		fmt.Printf("\nsha512Wanted == %v\n\n", sha512Wanted)
-
 		// Verify final hash
 		sha512AppendSum := sha512Append.Sum(nil)
 		if subtle.ConstantTimeCompare(sha512Wanted, sha512AppendSum) == 0 {
@@ -238,22 +198,10 @@ var decryptCmd = &cobra.Command{
 	},
 }
 
-// func DecryptAndVerifyHeader(noncePlusEncryptedHeaderPlusHash []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
-// 	headerb, err := DecryptAndVerifyChunk(noncePlusEncryptedHeaderPlusHash, key, blake)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return header, nil
-// }
-
 func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
 	if len(noncePlusEncryptedChunkPlusHash) <= TotalChunkOverhead {
-		fmt.Printf("DecryptAndVerifyChunk: len(noncePlusEncryptedChunkPlusHash) == %v\n", len(noncePlusEncryptedChunkPlusHash))
 		return nil, ErrInvalidChunkLength
 	}
-
-	fmt.Printf("\nDecryptAndVerifyChunk: noncePlusEncryptedChunkPlusHash length %v:\n    %v\n\n", len(noncePlusEncryptedChunkPlusHash), noncePlusEncryptedChunkPlusHash)
 
 	nonce, err := ConvertNonce(noncePlusEncryptedChunkPlusHash[:NonceLength])
 	if err != nil {
@@ -262,13 +210,8 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 	cipher := noncePlusEncryptedChunkPlusHash[NonceLength : len(noncePlusEncryptedChunkPlusHash)-Blake2bHashLength]
 	gotBlakeHash := noncePlusEncryptedChunkPlusHash[len(noncePlusEncryptedChunkPlusHash)-Blake2bHashLength:]
 
-	// fmt.Printf("len(nonce) == %v, %v\n", len(nonce), nonce)
-	fmt.Printf("len(cipher) == %v:\n    %v\n\n", len(cipher), cipher)
-	fmt.Printf("len(gotBlakeHash) == %v\n", len(gotBlakeHash))
-
 	plain, ok := secretbox.Open(nil, cipher, nonce, key)
 	if !ok {
-		fmt.Printf("Decryption failed :-(\n")
 		return nil, ErrChunkDecryptionFailed
 	}
 
@@ -278,14 +221,10 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 	blakeSum := blake.Sum(nil)
 
 	if subtle.ConstantTimeCompare(gotBlakeHash, blakeSum) == 0 {
-		fmt.Printf("gotBlakeHash length %v == %v\n", len(gotBlakeHash), gotBlakeHash)
-		fmt.Printf("blakeSum length     %v == %v\n", len(blakeSum), blakeSum)
 		return nil, ErrInvalidChunkHash
 	}
 
 	blake.Write(blakeSum)
-
-	fmt.Printf("DecryptAndVerifyChunk: decrypted plain == %v\n", plain)
 
 	return plain, nil
 }
@@ -315,16 +254,6 @@ func ParseDecryptedHeaderIntoValidFields(headerb []byte) (chunkSize int, msgType
 }
 
 func MustDeriveKeypairFromUserInput() *taber.Keys {
-
-	//
-	// !!! FIXME/TODO/UNFUCKME TEMPORARY !!!
-	//
-
-	return &taber.Keys{
-		Private: []uint8{0x30, 0x1c, 0xfb, 0x4, 0x3c, 0x22, 0xc3, 0xe4, 0x58, 0x1c, 0x43, 0xcc, 0x44, 0xab, 0x9c, 0x1c, 0xd3, 0x59, 0xee, 0x7e, 0x33, 0x2b, 0x52, 0x2a, 0x2f, 0xc, 0x8c, 0xff, 0xb7, 0x6d, 0xd4, 0x7c},
-		Public:  []uint8{0x5c, 0xa2, 0xc1, 0xc3, 0x8d, 0x7b, 0xaa, 0xc2, 0xfa, 0xc0, 0x89, 0xd5, 0x74, 0xc7, 0x4, 0xe4, 0xc7, 0x24, 0xf3, 0x7c, 0xa3, 0x5e, 0xef, 0x3d, 0x16, 0x72, 0x96, 0x90, 0xaa, 0x8e, 0xd, 0x6},
-	}
-
 	fmt.Print("Email (optional): ")
 	email := MustGetFromStdinStripped()
 
@@ -350,8 +279,6 @@ func MustDeriveKeypairFromUserInput() *taber.Keys {
 	if err != nil {
 		exit(err)
 	}
-
-	fmt.Printf("%#v\n", keypair)
 
 	return keypair
 }

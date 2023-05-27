@@ -294,9 +294,7 @@ func EncryptAndHashChunk(plain []byte, key *[ValidKeyLength]byte, blake hash.Has
 	// Note: `blake.Write(...)` never returns error, as per `hash.Hash` spec
 
 	cipher = append(cipher, nonceSlice...)
-	fmt.Printf("cipher before: len = %v, cap = %v\n", len(cipher), cap(cipher))
 	cipher = secretbox.Seal(cipher, plain, nonce, key)
-	fmt.Printf("cipher after:  len = %v, cap = %v\n", len(cipher), cap(cipher))
 	blake.Write(cipher)
 
 	blakeSum := blake.Sum(nil)
@@ -307,14 +305,6 @@ func EncryptAndHashChunk(plain []byte, key *[ValidKeyLength]byte, blake hash.Has
 		return nil, fmt.Errorf("EncryptAndHashChunk: ciphertext is of length "+
 			"%v but should be %v; something went wrong!", len(cipher), cap(cipher))
 	}
-
-	// TODO: Consider doing this instead, since it's more
-	// efficient... as long as it's correct (I need `blakeSum`, don't
-	// I...)
-	//
-	// blake.Write(cipher)
-
-	fmt.Printf("EncryptAndHashChunk: just wrote %v bytes:\n    %v\n\n", len(cipher), cipher)
 
 	return cipher, nil
 }
