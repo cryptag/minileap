@@ -3,7 +3,6 @@ package cmd
 import (
 	"bufio"
 	"crypto/rand"
-	"crypto/sha512"
 	"fmt"
 	"hash"
 	"io"
@@ -28,7 +27,6 @@ const (
 	EncryptChunkLength = 1_000_000
 	NonceLength        = 24
 	Blake2bHashLength  = blake2b.Size
-	Sha512HashLength   = 64
 
 	// 104 == 24 + 16 + 64
 	TotalChunkOverhead = NonceLength + secretbox.Overhead + Blake2bHashLength
@@ -158,8 +156,6 @@ var encryptCmd = &cobra.Command{
 		if err != nil {
 			exit(err)
 		}
-		sha512Append := sha512.New()
-		sha512Append.Write(KeyPair.Private)
 
 		//
 		// Header: Generate it, encrypt it, hash it
@@ -179,8 +175,6 @@ var encryptCmd = &cobra.Command{
 		if err != nil {
 			exit(err)
 		}
-		// Never returns error, as per `hash.Hash` spec
-		sha512Append.Write(noncePlusEncryptedHeaderPlusHash)
 
 		//
 		// Encrypt and hash each chunk
@@ -210,17 +204,9 @@ var encryptCmd = &cobra.Command{
 				exit(err)
 			}
 
-			sha512Append.Write(noncePlusEncryptedChunkPlusHash)
-
 			if endOfFile {
 				break
 			}
-		}
-
-		// Append final sha512 hash
-		_, err = cipherFile.Write(sha512Append.Sum(nil))
-		if err != nil {
-			exit(err)
 		}
 
 		fmt.Printf("File successfully encrypted and saved to %s\n", cipherFilename)

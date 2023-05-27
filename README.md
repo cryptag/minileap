@@ -173,28 +173,13 @@ terms that's just 276 bytes of overhead -- well worth the price of a
 simple spec and thus a simple implementation in many programming
 languages):
 
-`[ header (110 bytes) || chunk 1 (105 total bytes: 1 byte of content and 104 bytes of overhead) || SHA512 MAC (64 bytes) ]`
+`[ header (110 bytes) || chunk 1 (105 total bytes: 1 byte of content and 104 bytes of overhead) ]`
 
 header: `[ 24-byte nonce || 6-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
 
 chunk 1: `[ 24-byte nonce || 1-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
 
-SHA512 MAC: `[ 64-byte SHA512 hash ]`
-
-The end result of all this encrypting and hashing is a file of this structure: `[ header nonce || header ciphertext || Blake2b(header nonce || header ciphertext), aka the header hash || chunk 1 nonce || chunk 1 ciphertext || Blake2b(header hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's hash || chunk N's nonce || chunk N's ciphertext || SHA512(key || everything previous) ]`.
-
-That is, the trailing SHA512 MAC is calculated as such: `SHA512(key || header nonce || header ciphertext || Blake2b(header nonce || header ciphertext) aka the header hash || chunk 1 nonce || chunk 1 ciphertext || Blake2b(header hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's hash || chunk N's nonce || chunk N's ciphertext))
-
-
-#### Why add a SHA512 hash to the end?  Isn't that redundant?
-
-The trailing SHA512 hash accomplishes three things at once:
-
-1. Marking the end of the entire miniLeap message (no an attacker can't truncate it by deleting the last 1 or more chunks),
-
-2. Making it so both Blake2b and SHA512 need to be broken in order for an attacker to tamper with a miniLeap message without getting caught, and
-
-3. Making it possible for decryptors to not have to decrypt _anything_ -- not even the header -- without first ensuring the integrity of the entire miniLeap message, which is important in some contexts.
+The end result of all this encrypting and hashing is a file of this structure: `[ header nonce || header ciphertext || Blake2b(header nonce || header ciphertext), aka the header hash || chunk 1 nonce || chunk 1 ciphertext || Blake2b(header hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's hash || chunk N's nonce || chunk N's ciphertext ]`.
 
 
 #### Why add a Blake2b hash to the end of each chunk?  Isn't that redundant?

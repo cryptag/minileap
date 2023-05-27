@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"crypto/sha512"
 	"crypto/subtle"
 	"fmt"
 	"hash"
@@ -82,8 +81,6 @@ var decryptCmd = &cobra.Command{
 		if err != nil {
 			exit(err)
 		}
-		sha512Append := sha512.New()
-		sha512Append.Write(KeyPair.Private)
 
 		// TODO: Expect the filename in the first non-header chunk,
 		// padded to 255 bytes.  Make the first byte specify the
@@ -124,9 +121,6 @@ var decryptCmd = &cobra.Command{
 
 		// Header fully verified :ok_hand:
 
-		sha512Append.Write(noncePlusEncryptedHeaderPlusHash)
-
-		var sha512Wanted []byte
 		noncePlusEncryptedChunkPlusHash := make([]byte, chunkSize+TotalChunkOverhead)
 		for i := 0; true; i++ {
 			n, err = cipherFile.Read(noncePlusEncryptedChunkPlusHash)
@@ -138,36 +132,7 @@ var decryptCmd = &cobra.Command{
 				break
 			}
 
-			if n == Sha512HashLength {
-				sha512Wanted = noncePlusEncryptedChunkPlusHash[:n]
-				break
-			}
-
-			// Sha512HashLength < MinChunkLength, so we need not more checks
-
-			// TODO: Error out if `n < Sha512HashLength && n < chunkSize`?
-
 			endOfFile := (err == io.EOF)
-
-			if i == 0 && n < chunkSize {
-				// One-chunk message!
-				nonceChunkHash := noncePlusEncryptedChunkPlusHash[:n]
-
-				decryptedChunk, err := DecryptAndVerifyChunk(nonceChunkHash[:len(nonceChunkHash)-Sha512HashLength], KeyPairPrivate32, blake)
-				if err != nil {
-					exit(err)
-				}
-
-				_, err = plainFile.Write(decryptedChunk)
-				if err != nil {
-					exit(err)
-				}
-
-				sha512Append.Write(nonceChunkHash[:len(nonceChunkHash)-Sha512HashLength])
-				sha512Wanted = nonceChunkHash[len(nonceChunkHash)-Sha512HashLength:]
-
-				break
-			}
 
 			decryptedChunk, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash[:n], KeyPairPrivate32, blake)
 			if err != nil {
@@ -179,19 +144,9 @@ var decryptCmd = &cobra.Command{
 				exit(err)
 			}
 
-			sha512Append.Write(noncePlusEncryptedChunkPlusHash[:n])
-
 			if endOfFile {
 				break
 			}
-		}
-
-		// Verify final hash
-		sha512AppendSum := sha512Append.Sum(nil)
-		if subtle.ConstantTimeCompare(sha512Wanted, sha512AppendSum) == 0 {
-			// TODO: Clean up properly (e.g., delete tampered-with
-			// file, `plainFile`)
-			exit(fmt.Errorf("Everything decrypted perfectly, all the Blake2b chunk hashes were legit, but the final SHA-512 hash doesn't match! Wanted %v , got %v", sha512Wanted, sha512AppendSum))
 		}
 
 		fmt.Printf("Decrypted file successfully saved to %s\n", plainFilename)
