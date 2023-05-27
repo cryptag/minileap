@@ -173,17 +173,17 @@ terms that's just 276 bytes of overhead -- well worth the price of a
 simple spec and thus a simple implementation in many programming
 languages):
 
-`[ header (109 bytes) || chunk 1 (105 total bytes: 1 byte of content and 104 bytes of overhead) || SHA512 HMAC (64 bytes) ]`
+`[ header (110 bytes) || chunk 1 (105 total bytes: 1 byte of content and 104 bytes of overhead) || SHA512 MAC (64 bytes) ]`
 
-header: `[ 24-byte nonce || 5-byte body + 16-byte authentication tag || 64-byte rolling Blake2b HMAC ]`
+header: `[ 24-byte nonce || 6-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
 
-chunk 1: `[ 24-byte nonce || 1-byte body + 16-byte authentication tag || 64-byte rolling Blake2b HMAC ]`
+chunk 1: `[ 24-byte nonce || 1-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
 
-SHA512 HMAC: `[ 64-byte SHA512 hash ]`
+SHA512 MAC: `[ 64-byte SHA512 hash ]`
 
 The end result of all this encrypting and hashing is a file of this structure: `[ header nonce || header ciphertext || Blake2b(header nonce || header ciphertext), aka the header hash || chunk 1 nonce || chunk 1 ciphertext || Blake2b(header hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's hash || chunk N's nonce || chunk N's ciphertext || SHA512(key || everything previous) ]`.
 
-That is, the trailing SHA512 HMAC is calculated as such: `SHA512(key || header nonce || header ciphertext || Blake2b(header nonce || header ciphertext) aka the header hash || chunk 1 nonce || chunk 1 ciphertext || Blake2b(header hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's hash || chunk N's nonce || chunk N's ciphertext))
+That is, the trailing SHA512 MAC is calculated as such: `SHA512(key || header nonce || header ciphertext || Blake2b(header nonce || header ciphertext) aka the header hash || chunk 1 nonce || chunk 1 ciphertext || Blake2b(header hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's hash || chunk N's nonce || chunk N's ciphertext))
 
 
 #### Why add a SHA512 hash to the end?  Isn't that redundant?
