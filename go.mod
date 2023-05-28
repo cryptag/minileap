@@ -4,7 +4,6 @@ go 1.19
 
 require (
 	github.com/cryptag/go-minilock v0.0.0-20230307201426-f138c5839651
-	github.com/cryptag/sodium v1.5.2
 	github.com/spf13/cobra v1.7.0
 	golang.org/x/crypto v0.9.0
 )

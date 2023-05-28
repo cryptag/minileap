@@ -4,8 +4,6 @@ github.com/cmars/basen v0.0.0-20150613233007-fe3947df716e h1:0XBUw73chJ1VYSsfvcP
 github.com/cpuguy83/go-md2man/v2 v2.0.2/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/cryptag/go-minilock v0.0.0-20230307201426-f138c5839651 h1:rOxjZMKV4wDUe1DHinSJ8oLgI7F3W8f9uI4T17KnD48=
 github.com/cryptag/go-minilock v0.0.0-20230307201426-f138c5839651/go.mod h1:mP3jjk8yMP5bPGrEG/jTgg3e1A3671eIPo35BVjfO+M=
-github.com/cryptag/sodium v1.5.2 h1:U4NBduxVJe2HUU9ArZFMiK1KLJv+1YU3+Fzv9KD8KQA=
-github.com/cryptag/sodium v1.5.2/go.mod h1:kdHI5/mBli4iopc7lONthaTU+gQpVWtB2qpTGZWr6SU=
 github.com/dchest/blake2s v1.0.0 h1:gHCBR8ecSImY/Nwk7X0Q2KJAJcpI/HSkUAQDi8MCP4Q=
 github.com/dchest/blake2s v1.0.0/go.mod h1:GrKn2Lc4hWqAwRrbneYuvZ6kugiJMrjk3HHtcJkEhbs=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
