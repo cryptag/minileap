@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(encryptCmd)
+	rootCmd.AddCommand(encryptFileCmd)
 }
 
 const (
@@ -82,7 +82,7 @@ var (
 	}
 )
 
-var encryptCmd = &cobra.Command{
+var encryptFileCmd = &cobra.Command{
 	Use:   "encrypt-file",
 	Short: "Encrypt the given file with the given email/passphrase combination",
 	Run: func(cmd *cobra.Command, args []string) {

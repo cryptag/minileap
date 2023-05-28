@@ -15,10 +15,10 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(decryptCmd)
+	rootCmd.AddCommand(decryptFileCmd)
 }
 
-var decryptCmd = &cobra.Command{
+var decryptFileCmd = &cobra.Command{
 	Use:   "decrypt-file",
 	Short: "Decrypt the given file with the given email/passphrase combination",
 	Run: func(cmd *cobra.Command, args []string) {
