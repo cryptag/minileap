@@ -42,39 +42,51 @@ What gets encrypted:
 
 The final chunk may be below the stated Chunk Size.
 
-The 6-byte **header** (before encryption):
+The 5-byte **header** (before encryption):
 
-`[ 4 bytes: Chunk Size (int32 (NOT uint32; see below), big endian) || 2 bytes: message type (int16 (NOT uint16; see below), big endian) (see next section) ]`
+`[ 3 bytes: Chunk Size (uint24, big endian) || 2 bytes: message type (uint16, big endian) (see next section) ]`
 
-Chunk Size is an int32, _not_ a uint32.  This is to prevent accidental
-overflows when implementing miniLeap in languages that have 32-bit
-ints even on 64-bit systems (e.g., Java).  Thus, Chunk Size's
-left-most bit of its left-most byte must never be set to 1.
+Min permitted Chunk Size: 1,024 bytes.
 
-Similar logic for the message type; it is an int16, _not_ a uint16,
-and thus its left-most bit of its left-most byte must never be set to
--- you guessed it -- 1.
+Consider choosing <= 64KB chunks if you need random access (to
+download/decrypt less data) or if you need to send data in real-time
+(e.g., voice calls).
 
-Min permitted Chunk Size: 1,024 bytes.  Consider choosing ~64KB if you
-need random access (to download/decrypt less data), and ~1MB if you
-don't (to perform fewer encryptions/decryptions).  As stated above,
-the last chunk may be smaller than this, but the others may not be
-(except the header, obviously, which is small and of fixed size).
+Consider using 1MB+ chunks if you don't need either of the above (in
+order to perform fewer encryptions/decryptions).
 
-Max chunk size: 2**31 - 1 == (256**4)/2 - 1 bytes == 2,147,483,647 == ~2.15GB
+The last chunk may be smaller than the given chunk size, but the
+others may not be (except the header, obviously, which is small and of
+fixed size).
 
-Total possible miniLeap message types: 2**15 == (256**2)/2 == 32,768 (0 through 32,767)
+Max Chunk Size: 2**24 - 1 bytes == 16,777,215 == ~16MB
+
+Total possible valid miniLeap message types: 2**16 - 1 == 65,535
+
+
+###### Ciphertext Structure
+
+Once you have encrypted a piece of data (e.g., text or a file), the
+resulting miniLeap message will have the following structure:
+
+`[ 109-byte header: 24-byte nonce + 5-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b hash ]`
+
+followed by 1 or more data chunks that each encrypt N bytes, where N
+is equal to the header-provided Chunk Size for every chunk except
+(perhaps) the last one, which may be of size less than N:
+
+`[ N+105-byte chunk: 24-byte nonce + 1-byte "last chunk" indicator + N-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b rolling hash ]`
 
 
 #### Message Types
 
-0: (Invalid type; sanity check)
+0: Invalid type; sanity check
 
 1: UTF-8 encoded text (e.g., chat message)
 
 2: URL, including the protocol (e.g., https://leapchat.org, not just leapchat.org)
 
-3: A command to execute
+3: A command
 
 4: Passphrase (first and only non-header chunk is 256 bytes: 1 uint8 to tell us the passphrase length L (must be at least 75), then L bytes of passphrase, then `255 - L` random bytes of padding)
 
@@ -82,7 +94,7 @@ Total possible miniLeap message types: 2**15 == (256**2)/2 == 32,768 (0 through 
 
 6: File with file path, not just filename + body (details TBD)
 
-7 through 32,767: Reserved for future assignment; please submit a PR to propose a new message type
+7 through 65,535: Reserved for future assignment. Please submit a PR to propose a new message type.
 
 
 #### Future Enhancements Under Consideration
@@ -158,28 +170,31 @@ chunk number occurring at regular intervals.
 
 #### What is the overhead if I want to encrypt a tiny, 1-byte chat message?
 
-In general, the overhead of encrypting data with miniLeap is 104
-bytes/chunk + 173 bytes (for header and trailing hash; see below).
+In general, the overhead of encrypting data with miniLeap is 109 bytes
+(for the header nonce + body + hash; see below) + 105 bytes/chunk (for
+each chunk's nonce + body + hash).
 
 If you're encrypting 1,000,000 bytes, all in one chunk, the resulting
-ciphertext is thus 1,000,277 bytes (0.0277% overhead).
+ciphertext is thus 1,000,214 bytes (0.0214% overhead).
 
 If you're encrypting 100 bytes, all in one chunk, the resulting
-ciphertext is 377 bytes (277% overhead).
+ciphertext is 314 bytes (214% overhead).
 
-If you're encrypting just 1 byte, the resulting ciphertext is 277
-bytes (27,600% overhead, which sounds like a lot, but in absolute
-terms that's just 276 bytes of overhead -- well worth the price of a
+If you're encrypting just 1 byte, the resulting ciphertext is 214
+bytes (21,300% overhead, which sounds like a lot, but in absolute
+terms that's just 213 bytes of overhead -- well worth the price of a
 simple spec and thus a simple implementation in many programming
 languages):
 
-`[ header (110 bytes) || chunk 1 (105 total bytes: 1 byte of content and 104 bytes of overhead) ]`
+`[ header (109 bytes) || chunk 1 (106 total bytes: 1 byte of content and 105 bytes of overhead) ]`
 
-header: `[ 24-byte nonce || 6-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
+header: `[ 24-byte nonce || 5-byte body + 16-byte authentication tag || 64-byte Blake2b MAC ]`
 
 chunk 1: `[ 24-byte nonce || 1-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
 
-The end result of all this encrypting and hashing is a file of this structure: `[ header nonce || header ciphertext || Blake2b(header nonce || header ciphertext), aka the header hash || chunk 1 nonce || chunk 1 ciphertext || Blake2b(header hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's hash || chunk N's nonce || chunk N's ciphertext ]`.
+The end result of all this encrypting and hashing is a file of this structure:
+
+`[ header nonce || header ciphertext || Blake2b(header nonce || header ciphertext) || chunk 1 nonce || chunk 1 ciphertext || Blake2b(the header's Blake2b hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's Blake2b hash || chunk N's nonce || chunk N's ciphertext) ]`.
 
 
 #### Why add a Blake2b hash to the end of each chunk?  Isn't that redundant?
@@ -191,8 +206,8 @@ The rolling Blake2b hash at the end of each chunk accomplishes two things at onc
 2. Making it so we can detect a tampered-with message (e.g., the attacker deleted the last chunk but kept everything else the same) _early_, without needing to either decrypt or hash all the chunks first.  This enables safe, efficient, truly streaming decryption.
 
 Arguably what _is_ redundant is using authenticated cryptography for
-each thunk, though this prevents the header from being tampered with
-without detection even before a decryptor has checked the trailing
+each chunk, though this prevents a chunk from being tampered with
+without detection even before a decryptor has checked its trailing
 Blake2b hash -- a nice little bonus.  Plus, NaCl/libsodium is widely
-available in various programming languages, making it a good choice to
-place at the foundation of miniLeap.
+available in various programming languages, making it an excellent
+choice to place at the foundation of miniLeap.

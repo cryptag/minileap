@@ -22,44 +22,43 @@ func init() {
 }
 
 const (
-	// EncryptChunkLength tells us how big a chunk should be encrypted
-	// at once. Default: 1 million bytes. TODO: Make configurable.
-	EncryptChunkLength = 1_000_000
 	NonceLength        = 24
+	EncryptChunkLength = 1_000_000
 	Blake2bHashLength  = blake2b.Size
 
-	// 104 == 24 + 16 + 64
-	TotalChunkOverhead = NonceLength + secretbox.Overhead + Blake2bHashLength
+	// 104 == 24 + 16 + 64. Does not include IsLastChunkIndicatorLength
+	NonceCryptoBlakeOverhead = NonceLength + secretbox.Overhead + Blake2bHashLength
 
-	// Use DecryptChunkLength when decrypting. Default length: 1
-	// million 104 bytes; 1 million bytes of decrypted content +
-	// 24-byte nonce + 16 bytes of encryption overhead + 64 bytes of
-	// Blake2b hash.
-	DecryptChunkLength = EncryptChunkLength + TotalChunkOverhead
+	// 3-byte chunk size (big endian) || 2-byte message type (big endian)
+	EncryptHeaderLength = 5
 
-	// 4-byte chunk size (big endian) || 2-byte message type (big endian)
-	EncryptHeaderLength = 6
+	DecryptHeaderLength = EncryptHeaderLength + NonceCryptoBlakeOverhead
 
-	DecryptHeaderLength = EncryptHeaderLength + TotalChunkOverhead
+	// EncryptChunkLength tells us how big a chunk should be encrypted
+	// at once. Default: 1 million bytes. TODO: Make configurable.
+	IsLastChunkIndicatorLength = 1
+
+	// Use DecryptChunkLength when decrypting
+	DecryptChunkOverhead = IsLastChunkIndicatorLength + NonceCryptoBlakeOverhead
 
 	ValidKeyLength = 32
 )
 
 const (
-	MinChunkLength = int32(1 << 10)   //         1,024
-	MaxChunkLength = int32(1<<31 - 1) // 2,147,483,647
-	MaxMsgType     = int16(1<<15 - 1) //        32,767
+	MinChunkLength = int(1 << 10)      //      1,024
+	MaxChunkLength = int(1<<24 - 1)    // 16,777,215
+	MaxMsgType     = uint16(1<<16 - 1) //     65,535
 
 	//
 	// Message types
 	//
-	MessageTypeZero                    = int16(0) // Invalid
-	MessageTypeChatMessage             = int16(1)
-	MessageTypeURL                     = int16(2)
-	MessageTypeCommand                 = int16(3)
-	MessageTypePassphrase              = int16(4)
-	MessageTypeFileWithFilename        = int16(5)
-	MessageTypeFileWithFilenameAndPath = int16(6)
+	MessageTypeInvalid                 = uint16(0)
+	MessageTypeChatMessage             = uint16(1)
+	MessageTypeURL                     = uint16(2)
+	MessageTypeCommand                 = uint16(3)
+	MessageTypePassphrase              = uint16(4)
+	MessageTypeFileWithFilename        = uint16(5)
+	MessageTypeFileWithFilenameAndPath = uint16(6)
 )
 
 var (
@@ -133,8 +132,8 @@ var encryptCmd = &cobra.Command{
 		// TODO: Make the name and location of resulting encrypted
 		// file configurable with `-o <outfile>` option or similar
 
-		// Save encrypted file with ".enc" extension appended
-		cipherFilename := filename + ".enc"
+		// Save encrypted file with ".minileap" extension appended
+		cipherFilename := filename + ".minileap"
 
 		if fileExists(cipherFilename) {
 			exit(fmt.Errorf("Cannot save new file `%s`; file already exists at that location", cipherFilename))
@@ -161,9 +160,7 @@ var encryptCmd = &cobra.Command{
 		// Header: Generate it, encrypt it, hash it
 		//
 
-		// TODO: Check for `int32(EncryptChunkLength)` overflow
-
-		header, err := NewHeader(int32(EncryptChunkLength), MessageTypeFileWithFilename)
+		header, err := NewHeader(EncryptChunkLength, MessageTypeFileWithFilename)
 		if err != nil {
 			exit(err)
 		}
@@ -181,30 +178,53 @@ var encryptCmd = &cobra.Command{
 		//
 
 		var plainb [EncryptChunkLength]byte
-		var n int
-		for true { // Loop till EOF
-			n, err = plainFile.Read(plainb[:])
-			if err != nil && err != io.EOF {
-				exit(err)
-			}
+		// staged chunk consisting of IsLastChunkByte + plain chunk
+		var staged []byte
 
-			if n == 0 {
-				break
-			}
-
-			endOfFile := (err == io.EOF)
-
-			noncePlusEncryptedChunkPlusHash, err := EncryptAndHashChunk(plainb[:n], KeyPairPrivate32, blake)
+		// Closure helper ftw
+		encryptAndWriteStaged := func() {
+			noncePlusEncryptedChunkPlusHash, err := EncryptAndHashChunk(staged, KeyPairPrivate32, blake)
 			if err != nil {
 				exit(err)
 			}
-
 			_, err = cipherFile.Write(noncePlusEncryptedChunkPlusHash)
 			if err != nil {
 				exit(err)
 			}
+			staged = nil
+		}
 
-			if endOfFile {
+		// Loop till 0 bytes read. Fuck EOF, which only complicates things
+		for true {
+			n, err := plainFile.Read(plainb[:])
+			if err != nil && err != io.EOF {
+				exit(err)
+			}
+
+			if n > 0 {
+				if len(staged) > 0 {
+					// We have new data _and_ staged data, so set
+					// `staged` as _not_ the last chunk, then encrypt
+					// and write it.
+					staged[0] = IsLastChunkBoolToByte(false)
+					encryptAndWriteStaged()
+				}
+
+				// We have new data and no staged data. This may be
+				// the first iteration, and the current chunk may or
+				// not be the last one. Let's prepend a dummy value,
+				// then stage the chunk.
+				staged = append([]byte{0}, plainb[:n]...)
+				continue
+			}
+
+			if n == 0 && len(staged) > 0 {
+				// We have no new data but we _do_ have staged
+				// data. Therefore what is staged is the last
+				// chunk. So let's mark it as such, then encrypt
+				// and write it.
+				staged[0] = IsLastChunkBoolToByte(true)
+				encryptAndWriteStaged()
 				break
 			}
 		}
@@ -225,19 +245,21 @@ func wipeAll() {
 	}
 }
 
-func NewHeader(chunkLength int32, msgType int16) ([]byte, error) {
+func NewHeader(chunkLength int, msgType uint16) ([]byte, error) {
 	if chunkLength < MinChunkLength || chunkLength > MaxChunkLength {
 		return nil, ErrInvalidChunkLength
 	}
 
-	if msgType == MessageTypeZero || msgType > MaxMsgType {
+	if msgType == MessageTypeInvalid || msgType > MaxMsgType {
 		return nil, ErrInvalidMessageType
 	}
 
 	// Both are in big endian
 	header := []byte{
+		// Only working with chunkLength's lowest 3 bytes since it's a
+		// uint24
+
 		// Chunk size, aka chunk length
-		byte(chunkLength >> 24),
 		byte(chunkLength >> 16),
 		byte(chunkLength >> 8),
 		byte(chunkLength),
@@ -247,22 +269,22 @@ func NewHeader(chunkLength int32, msgType int16) ([]byte, error) {
 		byte(msgType),
 	}
 
-	// assert len(header) == 6
+	// assert len(header) == 5
 
 	return header, nil
 }
 
-func EncryptAndHashChunk(plain []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
-	plainLen := len(plain)
-	if plainLen == 0 {
+func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
+	isLastChunkBytePlusPlainLen := len(isLastChunkBytePlusPlain)
+	if isLastChunkBytePlusPlainLen == 0 {
 		return nil, fmt.Errorf("Cannot encrypt empty chunk")
 	}
 
-	// if plainLen > EncryptChunkLength {
-	// 	return nil, fmt.Errorf("Chunk too big (%v, must be %v max); use EncryptFile() instead", plainLen, EncryptChunkLength)
+	// if isLastChunkBytePlusPlainLen > EncryptChunkLength {
+	// 	return nil, fmt.Errorf("Chunk too big (%v, must be %v max); use EncryptFile() instead", isLastChunkBytePlusPlainLen, EncryptChunkLength)
 	// }
 
-	// `plainLen < EncryptChunkLength` is OK (for last chunk)
+	// `isLastChunkBytePlusPlainLen < EncryptChunkLength` is OK (for last chunk)
 
 	nonce, err := RandomNonce()
 	if err != nil {
@@ -270,8 +292,7 @@ func EncryptAndHashChunk(plain []byte, key *[ValidKeyLength]byte, blake hash.Has
 	}
 	nonceSlice := (*nonce)[:]
 
-	// aka plainLen + TotalChunkOverhead
-	cipherCapacity := NonceLength + plainLen + secretbox.Overhead + Blake2bHashLength
+	cipherCapacity := isLastChunkBytePlusPlainLen + NonceCryptoBlakeOverhead
 
 	// Start with length 0 and append from there so it's hard to
 	// accidentally access the trailing zeroes belowsef, brosef
@@ -280,7 +301,7 @@ func EncryptAndHashChunk(plain []byte, key *[ValidKeyLength]byte, blake hash.Has
 	// Note: `blake.Write(...)` never returns error, as per `hash.Hash` spec
 
 	cipher = append(cipher, nonceSlice...)
-	cipher = secretbox.Seal(cipher, plain, nonce, key)
+	cipher = secretbox.Seal(cipher, isLastChunkBytePlusPlain, nonce, key)
 	blake.Write(cipher)
 
 	blakeSum := blake.Sum(nil)
@@ -293,6 +314,14 @@ func EncryptAndHashChunk(plain []byte, key *[ValidKeyLength]byte, blake hash.Has
 	}
 
 	return cipher, nil
+}
+
+func IsLastChunkBoolToByte(isLastChunk bool) byte {
+	// TODO: Make more dynamic and harder to guess
+	if isLastChunk {
+		return 1
+	}
+	return 0
 }
 
 // From https://www.tutorialspoint.com/how-to-check-if-a-file-exists-in-golang
