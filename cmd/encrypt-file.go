@@ -42,6 +42,9 @@ const (
 	DecryptChunkOverhead = IsLastChunkIndicatorLength + NonceCryptoBlakeOverhead
 
 	ValidKeyLength = 32
+
+	MiniLeapFileExtension             = "minileap"
+	MiniLeapFileExtensionIncludingDot = "." + MiniLeapFileExtension
 )
 
 const (
@@ -133,7 +136,7 @@ var encryptFileCmd = &cobra.Command{
 		// file configurable with `-o <outfile>` option or similar
 
 		// Save encrypted file with ".minileap" extension appended
-		cipherFilename := filename + ".minileap"
+		cipherFilename := filename + MiniLeapFileExtensionIncludingDot
 
 		if fileExists(cipherFilename) {
 			exit(fmt.Errorf("Cannot save new file `%s`; file already exists at that location", cipherFilename))

@@ -59,10 +59,10 @@ var decryptFileCmd = &cobra.Command{
 		// TODO: Make the name and location of resulting decrypted
 		// file configurable with `-o <outfile>` option or similar
 
-		// Save decrypted file with ".minileap" extension removed...
+		// Save decrypted file with `.minileap` extension removed...
 		var plainFilename string
-		if strings.HasSuffix(filename, ".minileap") {
-			plainFilename = filename[:len(filename)-len(".minileap")]
+		if strings.HasSuffix(filename, MiniLeapFileExtensionIncludingDot) {
+			plainFilename = filename[:len(filename)-len(MiniLeapFileExtensionIncludingDot)]
 		}
 		if plainFilename == "" || fileExists(plainFilename) {
 			// ...or with ".dec" extension appended
