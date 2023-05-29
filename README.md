@@ -38,7 +38,7 @@ math.log2(1296 ** 25) == 258.49625007211563  # ~258.5 bits of entropy, plus we u
 
 What gets encrypted:
 
-`[ header (see below) ]` and `[ 1+ chunks of size Chunk Size indicated in the header ]`
+`[ header (see below) ]` and `[ 1+ chunks of size Chunk Size specified in the header ]`
 
 The final chunk may be below the stated Chunk Size.
 
@@ -75,7 +75,10 @@ followed by 1 or more data chunks that each encrypt N bytes, where N
 is equal to the header-provided Chunk Size for every chunk except
 (perhaps) the last one, which may be of size less than N:
 
-`[ N+105-byte chunk: 24-byte nonce + 1-byte "last chunk" indicator + N-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b rolling hash ]`
+`[ N+105-byte chunk: 24-byte nonce + 1-byte last chunk indicator + N-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b rolling hash ]`
+
+The last chunk indicator byte should be 0 if the chunk is not the last
+byte, and a 1 if it is.
 
 
 #### Message Types
@@ -171,8 +174,10 @@ chunk number occurring at regular intervals.
 #### What is the overhead if I want to encrypt a tiny, 1-byte chat message?
 
 In general, the overhead of encrypting data with miniLeap is 109 bytes
-(for the header nonce + body + hash; see below) + 105 bytes/chunk (for
-each chunk's nonce + body + hash).
+(for the header 24-byte header + 5-byte body + 64-byte Blake2b hash;
+see below) + 105 bytes/chunk (for each chunk's 24-byte nonce + 1 byte
+last chunk indicator byte prepended to the body + 16-byte overhead from
+libsodium's SecretBox encryption + 64-byte Blake2b rolling hash).
 
 If you're encrypting 1,000,000 bytes, all in one chunk, the resulting
 ciphertext is thus 1,000,214 bytes (0.0214% overhead).
@@ -180,9 +185,9 @@ ciphertext is thus 1,000,214 bytes (0.0214% overhead).
 If you're encrypting 100 bytes, all in one chunk, the resulting
 ciphertext is 314 bytes (214% overhead).
 
-If you're encrypting just 1 byte, the resulting ciphertext is 214
-bytes (21,300% overhead, which sounds like a lot, but in absolute
-terms that's just 213 bytes of overhead -- well worth the price of a
+If you're encrypting just 1 byte, the resulting ciphertext is 215
+bytes (21,400% overhead, which sounds like a lot, but in absolute
+terms that's just 214 bytes of overhead -- well worth the price of a
 simple spec and thus a simple implementation in many programming
 languages):
 
@@ -190,14 +195,14 @@ languages):
 
 header: `[ 24-byte nonce || 5-byte body + 16-byte authentication tag || 64-byte Blake2b MAC ]`
 
-chunk 1: `[ 24-byte nonce || 1-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
+chunk 1: `[ 24-byte nonce || 1-byte last chunk indicator + 1-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
 
 The end result of all this encrypting and hashing is a file of this structure:
 
-`[ header nonce || header ciphertext || Blake2b(header nonce || header ciphertext) || chunk 1 nonce || chunk 1 ciphertext || Blake2b(the header's Blake2b hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's Blake2b hash || chunk N's nonce || chunk N's ciphertext) ]`.
+`[ header nonce || header ciphertext || Blake2b(key || header nonce || header ciphertext) || chunk 1 nonce || chunk 1 ciphertext || Blake2b(the header's Blake2b hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's Blake2b hash || chunk N's nonce || chunk N's ciphertext) ]`.
 
 
-#### Why add a Blake2b hash to the end of each chunk?  Isn't that redundant?
+#### Why add a Blake2b hash to the end of each chunk?  Isn't that redundant since each chunk is encrypted using libsodium's SecretBox?
 
 The rolling Blake2b hash at the end of each chunk accomplishes two things at once:
 
