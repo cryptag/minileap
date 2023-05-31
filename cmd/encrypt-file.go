@@ -25,6 +25,10 @@ var encryptFileCmd = &cobra.Command{
 		// TODO: Loop over all files listed
 		filename := args[0]
 
+		if !minileap.FileExists(filename) {
+			exit(fmt.Errorf("File `%s` does not exist and thus cannot be encrypted!", filename))
+		}
+
 		// Derive keypair from user-specified email and password
 
 		requirePassphrase := false

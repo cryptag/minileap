@@ -23,6 +23,10 @@ var decryptFileCmd = &cobra.Command{
 
 		filename := args[0]
 
+		if !minileap.FileExists(filename) {
+			exit(fmt.Errorf("File `%s` does not exist and thus cannot be decrypted!", filename))
+		}
+
 		// Derive keypair from user-specified email and password
 
 		requirePassphrase := true
