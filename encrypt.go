@@ -230,6 +230,10 @@ func NewHeader(chunkLength int, msgType uint16) ([]byte, error) {
 	return header, nil
 }
 
+// EncryptAndHashChunk encrypts and hashes the given data. Unless you
+// are encrypting a miniLeap header or filename, the first argument
+// should consist of the data you want to encrypt prefixed by an
+// "isLastChunk" byte.
 func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
 	isLastChunkBytePlusPlainLen := len(isLastChunkBytePlusPlain)
 	if isLastChunkBytePlusPlainLen == 0 {
