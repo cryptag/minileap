@@ -2,7 +2,7 @@
 // 2017.01.13 / 2023.05.20
 
 // Copied from github.com/cryptag/cryptag/share/keys.go
-package cmd
+package minileap
 
 import (
 	"crypto/rand"
