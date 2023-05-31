@@ -190,14 +190,22 @@ func IsLastChunkByte(isLastChunk byte) bool {
 	return isLastChunk == 1
 }
 
-func MustDeriveKeypairFromUserInput() *taber.Keys {
+func MustDeriveKeypairFromUserInput(requirePassphrase bool) *taber.Keys {
 	fmt.Print("Email (optional): ")
 	email := MustGetFromStdinStripped()
 
-	fmt.Print("Passphrase (leave blank to generate new, random passphrase): ")
+	if requirePassphrase {
+		fmt.Print("Passphrase: ")
+	} else {
+		fmt.Print("Passphrase (leave blank to generate new, random passphrase): ")
+	}
 	passphrase := MustGetFromStdinSecure()
 
 	if len(passphrase) == 0 {
+		if requirePassphrase {
+			exit(fmt.Errorf("Passphrase required but not provided\n"))
+		}
+
 		fmt.Println("Generating random passphrase...")
 		var err error
 		passphrase, err = RandomPassphrase(25)

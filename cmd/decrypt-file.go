@@ -25,7 +25,8 @@ var decryptFileCmd = &cobra.Command{
 
 		// Derive keypair from user-specified email and password
 
-		keyPair := minileap.MustDeriveKeypairFromUserInput()
+		requirePassphrase := true
+		keyPair := minileap.MustDeriveKeypairFromUserInput(requirePassphrase)
 
 		keyPairPrivate32, err := minileap.ConvertKey(keyPair.Private)
 		if err != nil {
