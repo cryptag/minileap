@@ -8,7 +8,7 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "minileap",
+	Use:   "ml",
 	Short: "miniLeap: The last encryption utility you'll ever need",
 	Long: `miniLeap: The last encryption utility you'll ever need.
 
