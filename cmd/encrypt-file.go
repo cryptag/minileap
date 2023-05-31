@@ -48,7 +48,7 @@ var encryptFileCmd = &cobra.Command{
 			exit(err)
 		}
 
-		fmt.Printf("File successfully encrypted and saved to %s\n", cipherFilename)
+		fmt.Printf("Encrypted file successfully saved to `%s`\n", cipherFilename)
 	},
 }
 

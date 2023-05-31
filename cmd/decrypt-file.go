@@ -46,6 +46,6 @@ var decryptFileCmd = &cobra.Command{
 			exit(err)
 		}
 
-		fmt.Printf("Decrypted file successfully saved to %s\n", plainFilename)
+		fmt.Printf("Decrypted file successfully saved to `%s`\n", plainFilename)
 	},
 }
