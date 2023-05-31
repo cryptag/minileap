@@ -77,7 +77,7 @@ var (
 	}
 )
 
-func EncryptFile(filename string, key *[32]byte, dest string, overwrite bool) (cipherFilename string, err error) {
+func EncryptFile(filename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
 	if key == nil || *key == [32]byte{} {
 		return "", ErrInvalidKey
 	}
@@ -91,7 +91,7 @@ func EncryptFile(filename string, key *[32]byte, dest string, overwrite bool) (c
 		cipherFilename = filename + MiniLeapFileExtensionIncludingDot
 	}
 
-	if FileExists(cipherFilename) && !overwrite {
+	if FileExists(cipherFilename) && !forceOverwrite {
 		return cipherFilename, fmt.Errorf("Encrypted file `%s` already exists and you've chosen not to overwrite existing files!", cipherFilename)
 	}
 

@@ -8,10 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(encryptFileCmd)
-}
-
 var encryptFileCmd = &cobra.Command{
 	Use:   "encrypt-file",
 	Short: "Encrypt the given file with the given email/passphrase combination",
@@ -48,7 +44,7 @@ var encryptFileCmd = &cobra.Command{
 
 		fmt.Printf("Using miniLock ID %s to derive symmetric key to encrypt file %s ...\n", mID, filename)
 
-		cipherFilename, err := minileap.EncryptFile(filename, keyPairPrivate32, "", false)
+		cipherFilename, err := minileap.EncryptFile(filename, keyPairPrivate32, gEncryptFile_OutputFilename, gEncryptFile_ForceOverwrite)
 		if err != nil {
 			exit(err)
 		}

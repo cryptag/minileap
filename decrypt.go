@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-func DecryptFile(filename string, key *[32]byte, dest string, overwrite bool) (plainFilename string, err error) {
+func DecryptFile(filename string, key *[32]byte, dest string, forceOverwrite bool) (plainFilename string, err error) {
 	if key == nil || *key == [32]byte{} {
 		return "", ErrInvalidKey
 	}
@@ -31,7 +31,7 @@ func DecryptFile(filename string, key *[32]byte, dest string, overwrite bool) (p
 		plainFilename = filename + ".dec"
 	}
 
-	if FileExists(plainFilename) && !overwrite {
+	if FileExists(plainFilename) && !forceOverwrite {
 		return plainFilename, fmt.Errorf("Unencrypted file `%s` already exists and you've chosen not to overwrite existing files!", plainFilename)
 	}
 

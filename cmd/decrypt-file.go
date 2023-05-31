@@ -7,10 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(decryptFileCmd)
-}
-
 var decryptFileCmd = &cobra.Command{
 	Use:   "decrypt-file",
 	Short: "Decrypt the given file with the given email/passphrase combination",
@@ -46,7 +42,7 @@ var decryptFileCmd = &cobra.Command{
 
 		fmt.Printf("Using miniLock ID %s to derive symmetric key to decrypt file %s ...\n", mID, filename)
 
-		plainFilename, err := minileap.DecryptFile(filename, keyPairPrivate32, "", false)
+		plainFilename, err := minileap.DecryptFile(filename, keyPairPrivate32, gDecryptFile_OutputFilename, gDecryptFile_ForceOverwrite)
 		if err != nil {
 			exit(err)
 		}
