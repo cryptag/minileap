@@ -88,12 +88,6 @@ func EncryptFile(filename string, key *[32]byte, dest string, overwrite bool) (c
 	}
 	defer plainFile.Close()
 
-	// plainFileInfo, err := plainFile.Stat()
-	// if err != nil {
-	// 	return "", err
-	// }
-	// plainFileLength := plainFileInfo.Size()
-
 	// TODO: Make the name and location of resulting encrypted
 	// file configurable with `-o <outfile>` option or similar
 
@@ -234,12 +228,6 @@ func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]b
 	if isLastChunkBytePlusPlainLen == 0 {
 		return nil, fmt.Errorf("Cannot encrypt empty chunk")
 	}
-
-	// if isLastChunkBytePlusPlainLen > EncryptChunkLength {
-	// 	return nil, fmt.Errorf("Chunk too big (%v, must be %v max); use EncryptFile() instead", isLastChunkBytePlusPlainLen, EncryptChunkLength)
-	// }
-
-	// `isLastChunkBytePlusPlainLen < EncryptChunkLength` is OK (for last chunk)
 
 	nonce, err := RandomNonce()
 	if err != nil {

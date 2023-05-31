@@ -52,15 +52,6 @@ var encryptFileCmd = &cobra.Command{
 	},
 }
 
-// From https://www.tutorialspoint.com/how-to-check-if-a-file-exists-in-golang
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return !info.IsDir()
-}
-
 func exit(err error) {
 	fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 	os.Exit(1)
