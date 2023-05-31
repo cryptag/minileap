@@ -17,7 +17,7 @@ var encryptFileCmd = &cobra.Command{
 	Short: "Encrypt the given file with the given email/passphrase combination",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
-			exit(fmt.Errorf("Usage: minileap encrypt-file <filename> [ <filename2> ... ]"))
+			exit(fmt.Errorf("Usage: ml encrypt-file <filename> [ <filename2> ... ]"))
 		}
 
 		// assert len(args) >= 1

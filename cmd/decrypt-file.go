@@ -16,7 +16,7 @@ var decryptFileCmd = &cobra.Command{
 	Short: "Decrypt the given file with the given email/passphrase combination",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
-			exit(fmt.Errorf("Usage: minileap decrypt <filename>"))
+			exit(fmt.Errorf("Usage: ml decrypt <filename>"))
 		}
 
 		// assert len(args) == 1
@@ -38,8 +38,6 @@ var decryptFileCmd = &cobra.Command{
 		if err != nil {
 			exit(err)
 		}
-
-		// Use not-so-fancy crypto to decrypt with user keypair
 
 		fmt.Printf("Using miniLock ID %s to derive symmetric key to decrypt file %s ...\n", mID, filename)
 
