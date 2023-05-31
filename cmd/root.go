@@ -12,9 +12,9 @@ var rootCmd = &cobra.Command{
 	Short: "miniLeap: The last encryption utility you'll ever need",
 	Long: `miniLeap: The last encryption utility you'll ever need.
 
-Combines the best of libsodium, miniLock, and LeapChat into one simple yet flexible utility`,
+Combines the best of libsodium, miniLock, and LeapChat into one simple yet flexible library and command line tool.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("TODO: Add actual functionality\n")
+		cmd.Usage()
 	},
 }
 
