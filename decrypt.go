@@ -27,13 +27,18 @@ func DecryptFile(filename string, key *[32]byte, dest string, overwrite bool) (p
 	// TODO: Make the name and location of resulting decrypted
 	// file configurable with `-o <outfile>` option or similar
 
-	// Save decrypted file with `.minileap` extension removed...
-	if strings.HasSuffix(filename, MiniLeapFileExtensionIncludingDot) {
+	plainFilename = dest
+	if dest == "" && strings.HasSuffix(filename, MiniLeapFileExtensionIncludingDot) {
+		// Save decrypted file with `.minileap` extension removed...
 		plainFilename = filename[:len(filename)-len(MiniLeapFileExtensionIncludingDot)]
 	}
-	if plainFilename == "" || FileExists(plainFilename) {
-		// ...or with ".dec" extension appended
+
+	if plainFilename == "" {
 		plainFilename = filename + ".dec"
+	}
+
+	if FileExists(plainFilename) && !overwrite {
+		return plainFilename, fmt.Errorf("Unencrypted file `%s` already exists and you've chosen not to overwrite existing files!", plainFilename)
 	}
 
 	plainFile, err := os.Create(plainFilename)
