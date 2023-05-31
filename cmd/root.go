@@ -14,6 +14,8 @@ var rootCmd = &cobra.Command{
 
 Combines the best of libsodium, miniLock, and LeapChat into one simple yet flexible library and command line tool.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("Welcome to miniLeap! The last encryption utility you'll ever need.\n\n")
+
 		cmd.Usage()
 	},
 }
