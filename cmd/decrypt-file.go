@@ -8,8 +8,9 @@ import (
 )
 
 var decryptFileCmd = &cobra.Command{
-	Use:   "decrypt-file",
-	Short: "Decrypt the given file with the given email/passphrase combination",
+	Use:     "decrypt-file",
+	Aliases: []string{"df"},
+	Short:   "Decrypt the given file with the given email/passphrase combination",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			exit(fmt.Errorf("Usage: ml decrypt <filename>"))

@@ -9,8 +9,9 @@ import (
 )
 
 var encryptFileCmd = &cobra.Command{
-	Use:   "encrypt-file",
-	Short: "Encrypt the given file with the given email/passphrase combination",
+	Use:     "encrypt-file",
+	Aliases: []string{"ef"},
+	Short:   "Encrypt the given file with the given email/passphrase combination",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
 			exit(fmt.Errorf("Usage: ml encrypt-file <filename> [ <filename2> ... ]"))
