@@ -18,12 +18,6 @@ func DecryptFile(filename string, key *[32]byte, dest string, overwrite bool) (p
 		return "", ErrInvalidKey
 	}
 
-	cipherFile, err := os.Open(filename)
-	if err != nil {
-		return "", err
-	}
-	defer cipherFile.Close()
-
 	// TODO: Make the name and location of resulting decrypted
 	// file configurable with `-o <outfile>` option or similar
 
@@ -40,6 +34,12 @@ func DecryptFile(filename string, key *[32]byte, dest string, overwrite bool) (p
 	if FileExists(plainFilename) && !overwrite {
 		return plainFilename, fmt.Errorf("Unencrypted file `%s` already exists and you've chosen not to overwrite existing files!", plainFilename)
 	}
+
+	cipherFile, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	defer cipherFile.Close()
 
 	plainFile, err := os.Create(plainFilename)
 	if err != nil {
