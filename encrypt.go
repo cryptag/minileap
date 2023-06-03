@@ -78,16 +78,16 @@ var (
 	}
 )
 
-func EncryptFile(chunkLength int, filename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
+func EncryptFile(chunkLength int, plainFilename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
 	if key == nil || *key == [32]byte{} {
 		return "", ErrInvalidKey
 	}
 
 	if dest == "" {
 		// Save encrypted file with ".minileap" extension appended
-		cipherFilename = filename + MiniLeapFileExtensionIncludingDot
+		cipherFilename = plainFilename + MiniLeapFileExtensionIncludingDot
 	} else if DirExists(dest) {
-		cipherFilename = filepath.Clean(dest) + string(filepath.Separator) + filepath.Base(filename) + MiniLeapFileExtensionIncludingDot
+		cipherFilename = filepath.Clean(dest) + string(filepath.Separator) + filepath.Base(plainFilename) + MiniLeapFileExtensionIncludingDot
 	} else {
 		cipherFilename = dest
 	}
@@ -96,7 +96,7 @@ func EncryptFile(chunkLength int, filename string, key *[32]byte, dest string, f
 		return cipherFilename, fmt.Errorf("Encrypted file `%s` already exists and you've chosen not to overwrite existing files!", cipherFilename)
 	}
 
-	plainFile, err := os.Open(filename)
+	plainFile, err := os.Open(plainFilename)
 	if err != nil {
 		return "", err
 	}

@@ -14,32 +14,29 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-func DecryptFile(filename string, key *[32]byte, dest string, forceOverwrite bool) (plainFilename string, err error) {
+func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwrite bool) (plainFilename string, err error) {
 	if key == nil || *key == [32]byte{} {
 		return "", ErrInvalidKey
 	}
 
-	// TODO: Make the name and location of resulting decrypted
-	// file configurable with `-o <outfile>` option or similar
-
-	if strings.HasSuffix(filename, MiniLeapFileExtensionIncludingDot) {
-		// Save decrypted file with `.minileap` extension removed...
-		plainFilename = filename[:len(filename)-len(MiniLeapFileExtensionIncludingDot)]
+	if strings.HasSuffix(cipherFilename, MiniLeapFileExtensionIncludingDot) {
+		// Save decrypted file with `.minileap` extension removed
+		plainFilename = cipherFilename[:len(cipherFilename)-len(MiniLeapFileExtensionIncludingDot)]
 	}
 
 	if plainFilename == "" {
-		plainFilename = filename + ".dec"
+		plainFilename = cipherFilename + ".dec"
 	}
 
 	// Prepend destination dir to `plainFilename`
-	sep := string(filepath.Separator)
-	plainFilename = strings.TrimRight(dest, sep) + sep + filepath.Base(plainFilename)
+	slash := string(filepath.Separator)
+	plainFilename = filepath.Clean(dest) + slash + filepath.Base(plainFilename)
 
 	if FileExists(plainFilename) && !forceOverwrite {
 		return plainFilename, fmt.Errorf("Unencrypted file `%s` already exists and you've chosen not to overwrite existing files!", plainFilename)
 	}
 
-	cipherFile, err := os.Open(filename)
+	cipherFile, err := os.Open(cipherFilename)
 	if err != nil {
 		return "", err
 	}
