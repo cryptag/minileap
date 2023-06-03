@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cryptag/go-minilock/taber"
@@ -82,13 +83,13 @@ func EncryptFile(chunkLength int, filename string, key *[32]byte, dest string, f
 		return "", ErrInvalidKey
 	}
 
-	// TODO: Make the name and location of resulting encrypted
-	// file configurable with `-o <outfile>` option or similar
-
-	cipherFilename = dest
 	if dest == "" {
 		// Save encrypted file with ".minileap" extension appended
 		cipherFilename = filename + MiniLeapFileExtensionIncludingDot
+	} else if DirExists(dest) {
+		cipherFilename = filepath.Clean(dest) + string(filepath.Separator) + filepath.Base(filename) + MiniLeapFileExtensionIncludingDot
+	} else {
+		cipherFilename = dest
 	}
 
 	if FileExists(cipherFilename) && !forceOverwrite {
@@ -298,6 +299,14 @@ func FileExists(filename string) bool {
 		return false
 	}
 	return !info.IsDir()
+}
+
+func DirExists(dir string) bool {
+	info, err := os.Stat(dir)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return info.IsDir()
 }
 
 func MustGetFromStdinSecure() string {
