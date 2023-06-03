@@ -6,6 +6,7 @@ import (
 	"hash"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/cryptag/go-minilock/taber"
@@ -21,8 +22,7 @@ func DecryptFile(filename string, key *[32]byte, dest string, forceOverwrite boo
 	// TODO: Make the name and location of resulting decrypted
 	// file configurable with `-o <outfile>` option or similar
 
-	plainFilename = dest
-	if dest == "" && strings.HasSuffix(filename, MiniLeapFileExtensionIncludingDot) {
+	if strings.HasSuffix(filename, MiniLeapFileExtensionIncludingDot) {
 		// Save decrypted file with `.minileap` extension removed...
 		plainFilename = filename[:len(filename)-len(MiniLeapFileExtensionIncludingDot)]
 	}
@@ -30,6 +30,10 @@ func DecryptFile(filename string, key *[32]byte, dest string, forceOverwrite boo
 	if plainFilename == "" {
 		plainFilename = filename + ".dec"
 	}
+
+	// Prepend destination dir to `plainFilename`
+	sep := string(filepath.Separator)
+	plainFilename = strings.TrimRight(dest, sep) + sep + filepath.Base(plainFilename)
 
 	if FileExists(plainFilename) && !forceOverwrite {
 		return plainFilename, fmt.Errorf("Unencrypted file `%s` already exists and you've chosen not to overwrite existing files!", plainFilename)
