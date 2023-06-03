@@ -48,12 +48,21 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 	}
 	defer plainFile.Close()
 
+	err = DecryptReaderToWriter(cipherFile, key, plainFile)
+	if err != nil {
+		return plainFilename, err
+	}
+
+	return plainFilename, nil
+}
+
+func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer) error {
 	// TODO: Run `os.Remove(plainFilename)` on error
 
 	// Hashers ftw
 	blake, err := blake2b.New512((*key)[:])
 	if err != nil {
-		return plainFilename, err
+		return err
 	}
 
 	// TODO: Expect the filename in the first non-header chunk,
@@ -69,26 +78,26 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 
 	n, err := cipherFile.Read(noncePlusEncryptedHeaderPlusHash)
 	if err != nil {
-		return plainFilename, err
+		return err
 	}
 
 	if n != DecryptHeaderLength {
-		return plainFilename, fmt.Errorf("Decrypting header: Wanted %v bytes, got %v\n",
+		return fmt.Errorf("Decrypting header: Wanted %v bytes, got %v\n",
 			DecryptHeaderLength, n)
 	}
 
 	header, err := DecryptAndVerifyChunk(noncePlusEncryptedHeaderPlusHash, key, blake)
 	if err != nil {
-		return plainFilename, err
+		return err
 	}
 
 	chunkSize, msgType, err := ParseDecryptedHeaderIntoValidFields(header)
 	if err != nil {
-		return plainFilename, err
+		return err
 	}
 
 	if msgType != MessageTypeFileWithFilename {
-		return plainFilename, fmt.Errorf("TEMPORARY: Got msgType == %v, wanted %v\n",
+		return fmt.Errorf("TEMPORARY: Got msgType == %v, wanted %v\n",
 			msgType, MessageTypeFileWithFilename)
 	}
 
@@ -99,7 +108,7 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 	for true {
 		n, err = cipherFile.Read(noncePlusEncryptedChunkPlusHash)
 		if err != nil && err != io.EOF {
-			return plainFilename, err
+			return err
 		}
 
 		if n == 0 {
@@ -108,14 +117,14 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 
 		isLastPlusDecryptedChunk, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash[:n], key, blake)
 		if err != nil {
-			return plainFilename, err
+			return err
 		}
 
 		isLastChunk = IsLastChunkByte(isLastPlusDecryptedChunk[0])
 
 		_, err = plainFile.Write(isLastPlusDecryptedChunk[1:])
 		if err != nil {
-			return plainFilename, err
+			return err
 		}
 
 		if isLastChunk {
@@ -127,7 +136,7 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 		fmt.Fprintf(os.Stderr, "The file just decrypted may have been truncated! Or it could be a bug in the code that did the encryption; that's all we know.\n")
 	}
 
-	return plainFilename, nil
+	return nil
 }
 
 func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
