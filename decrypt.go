@@ -203,7 +203,7 @@ func MustDeriveKeypairFromUserInput(requirePassphrase bool) *taber.Keys {
 
 	if len(passphrase) == 0 {
 		if requirePassphrase {
-			exit(fmt.Errorf("Passphrase required but not provided\n"))
+			exit(fmt.Errorf("Passphrase required but not provided"))
 		}
 
 		fmt.Println("Generating random passphrase...")
