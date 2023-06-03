@@ -20,28 +20,32 @@ Combines the best of libsodium, miniLock, and LeapChat into one simple yet flexi
 	},
 }
 
-// Global vars that cobra ~forces us to have
-var (
-	gEncryptFile_OutputFilename string
-	gEncryptFile_ForceOverwrite bool
+type cliOptions struct {
+	EncryptFile_OutputFilename string
+	EncryptFile_ForceOverwrite bool
 
-	gDecryptFile_OutputFilename string
-	gDecryptFile_ForceOverwrite bool
+	DecryptFile_DestinationDirectory string
+	DecryptFile_ForceOverwrite       bool
+}
+
+// !Global vars that cobra ~forces us to have
+var (
+	options = cliOptions{}
 )
 
 func Execute() {
 	//
 	// encrypt-file
 	//
-	encryptFileCmd.Flags().BoolVar(&gEncryptFile_ForceOverwrite, "force", false, "force overwrite of output file?")
-	encryptFileCmd.Flags().StringVarP(&gEncryptFile_OutputFilename, "output", "o", "", "output filename")
+	encryptFileCmd.Flags().BoolVar(&options.EncryptFile_ForceOverwrite, "force", false, "force overwrite of output file?")
+	encryptFileCmd.Flags().StringVarP(&options.EncryptFile_OutputFilename, "output", "o", "", "output filename")
 	rootCmd.AddCommand(encryptFileCmd)
 
 	//
 	// decrypt-file
 	//
-	decryptFileCmd.Flags().BoolVar(&gDecryptFile_ForceOverwrite, "force", false, "force overwrite of output file?")
-	decryptFileCmd.Flags().StringVarP(&gDecryptFile_OutputFilename, "output", "o", "", "output filename")
+	decryptFileCmd.Flags().BoolVar(&options.DecryptFile_ForceOverwrite, "force", false, "force overwrite of output file?")
+	decryptFileCmd.Flags().StringVarP(&options.DecryptFile_DestinationDirectory, "dest", "d", ".", "destination directory")
 	rootCmd.AddCommand(decryptFileCmd)
 
 	if err := rootCmd.Execute(); err != nil {
