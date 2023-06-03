@@ -77,7 +77,7 @@ var (
 	}
 )
 
-func EncryptFile(filename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
+func EncryptFile(chunkLength int, filename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
 	if key == nil || *key == [32]byte{} {
 		return "", ErrInvalidKey
 	}
@@ -107,6 +107,19 @@ func EncryptFile(filename string, key *[32]byte, dest string, forceOverwrite boo
 	}
 	defer cipherFile.Close()
 
+	err = EncryptReaderToWriter(chunkLength, MessageTypeFileWithFilename, plainFile, key, cipherFile)
+	if err != nil {
+		return cipherFilename, err
+	}
+
+	return cipherFilename, nil
+}
+
+func EncryptReaderToWriter(chunkLength int, msgType uint16, plainFile io.Reader, key *[32]byte, cipherFile io.Writer) error {
+	if key == nil || *key == [32]byte{} {
+		return ErrInvalidKey
+	}
+
 	// TODO: Add the filename in the first non-header chunk,
 	// padded to 255 bytes.  Make the first byte specify the
 	// length of the filename if needed, thus resulting in the
@@ -114,24 +127,24 @@ func EncryptFile(filename string, key *[32]byte, dest string, forceOverwrite boo
 
 	blake, err := blake2b.New512((*key)[:])
 	if err != nil {
-		return cipherFilename, err
+		return err
 	}
 
 	//
 	// Header: Generate it, encrypt it, hash it
 	//
 
-	header, err := NewHeader(EncryptChunkLength, MessageTypeFileWithFilename)
+	header, err := NewHeader(chunkLength, msgType)
 	if err != nil {
-		return cipherFilename, err
+		return err
 	}
 	noncePlusEncryptedHeaderPlusHash, err := EncryptAndHashChunk(header, key, blake)
 	if err != nil {
-		return cipherFilename, err
+		return err
 	}
 	_, err = cipherFile.Write(noncePlusEncryptedHeaderPlusHash)
 	if err != nil {
-		return cipherFilename, err
+		return err
 	}
 
 	//
@@ -161,7 +174,7 @@ func EncryptFile(filename string, key *[32]byte, dest string, forceOverwrite boo
 	for true {
 		n, err := plainFile.Read(plainb[:])
 		if err != nil && err != io.EOF {
-			return cipherFilename, err
+			return err
 		}
 
 		if n > 0 {
@@ -172,7 +185,7 @@ func EncryptFile(filename string, key *[32]byte, dest string, forceOverwrite boo
 				staged[0] = IsLastChunkBoolToByte(false)
 				err = encryptAndWriteStaged()
 				if err != nil {
-					return cipherFilename, err
+					return err
 				}
 			}
 
@@ -192,13 +205,13 @@ func EncryptFile(filename string, key *[32]byte, dest string, forceOverwrite boo
 			staged[0] = IsLastChunkBoolToByte(true)
 			err = encryptAndWriteStaged()
 			if err != nil {
-				return cipherFilename, err
+				return err
 			}
 			break
 		}
 	}
 
-	return cipherFilename, nil
+	return nil
 }
 
 func NewHeader(chunkLength int, msgType uint16) ([]byte, error) {
