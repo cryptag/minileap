@@ -37,7 +37,7 @@ var (
 
 func Execute() {
 	// TEMPORARY: Set defaults
-	options.EncryptFile_ChunkSize = minileap.EncryptChunkLength
+	options.EncryptFile_ChunkSize = minileap.DefaultEncryptChunkLength
 
 	// TODO: Remove the above and fully implement this instead:
 	//

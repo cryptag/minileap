@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	NonceLength        = 24
-	EncryptChunkLength = 1_000_000
-	Blake2bHashLength  = blake2b.Size
+	NonceLength               = 24
+	DefaultEncryptChunkLength = 1_000_000
+	Blake2bHashLength         = blake2b.Size
 
 	// 104 == 24 + 16 + 64. Does not include IsLastChunkIndicatorLength
 	NonceCryptoBlakeOverhead = NonceLength + secretbox.Overhead + Blake2bHashLength
@@ -30,7 +30,7 @@ const (
 
 	DecryptHeaderLength = EncryptHeaderLength + NonceCryptoBlakeOverhead
 
-	// EncryptChunkLength tells us how big a chunk should be encrypted
+	// DefaultEncryptChunkLength tells us how big a chunk should be encrypted
 	// at once. Default: 1 million bytes. TODO: Make configurable.
 	IsLastChunkIndicatorLength = 1
 
@@ -152,7 +152,7 @@ func EncryptReaderToWriter(chunkLength int, msgType uint16, plainFile io.Reader,
 	// Encrypt and hash each chunk
 	//
 
-	var plainb [EncryptChunkLength]byte
+	var plainb [DefaultEncryptChunkLength]byte
 	// staged chunk consisting of IsLastChunkByte + plain chunk
 	var staged []byte
 
