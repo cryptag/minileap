@@ -52,7 +52,7 @@ const (
 	// Message types
 	//
 	MessageTypeInvalid                 = uint16(0)
-	MessageTypeChatMessage             = uint16(1)
+	MessageTypeText                    = uint16(1)
 	MessageTypeURL                     = uint16(2)
 	MessageTypeCommand                 = uint16(3)
 	MessageTypePassphrase              = uint16(4)
