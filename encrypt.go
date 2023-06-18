@@ -18,20 +18,21 @@ import (
 )
 
 const (
-	NonceLength               = 24
-	DefaultEncryptChunkLength = 1_000_000
-	Blake2bHashLength         = blake2b.Size
+	NonceLength = 24
+	// EncryptChunkLength tells us how big a chunk should be encrypted
+	// at once.
+	EncryptChunkLength = 100_000
+
+	Blake2bHashLength = blake2b.Size
 
 	// 104 == 24 + 16 + 64. Does not include IsLastChunkIndicatorLength
 	NonceCryptoBlakeOverhead = NonceLength + secretbox.Overhead + Blake2bHashLength
 
-	// 3-byte chunk size (big endian) || 2-byte message type (big endian)
-	EncryptHeaderLength = 5
+	// 2-byte message type (big endian)
+	EncryptHeaderLength = 2
 
 	DecryptHeaderLength = EncryptHeaderLength + NonceCryptoBlakeOverhead
 
-	// DefaultEncryptChunkLength tells us how big a chunk should be encrypted
-	// at once. Default: 1 million bytes. TODO: Make configurable.
 	IsLastChunkIndicatorLength = 1
 
 	// Use DecryptChunkLength when decrypting
@@ -44,9 +45,7 @@ const (
 )
 
 const (
-	MinChunkLength = int(1 << 10)      //      1,024
-	MaxChunkLength = int(1<<24 - 1)    // 16,777,215
-	MaxMsgType     = uint16(1<<16 - 1) //     65,535
+	MaxMsgType = uint16(1<<16 - 1) // 65,535
 
 	//
 	// Message types
@@ -78,7 +77,7 @@ var (
 	}
 )
 
-func EncryptFile(chunkLength int, plainFilename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
+func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
 	if key == nil || *key == [32]byte{} {
 		return "", ErrInvalidKey
 	}
@@ -108,7 +107,7 @@ func EncryptFile(chunkLength int, plainFilename string, key *[32]byte, dest stri
 	}
 	defer cipherFile.Close()
 
-	err = EncryptReaderToWriter(chunkLength, MessageTypeFileWithFilename, plainFile, key, cipherFile)
+	err = EncryptReaderToWriter(MessageTypeFileWithFilename, plainFile, key, cipherFile)
 	if err != nil {
 		return cipherFilename, err
 	}
@@ -116,7 +115,7 @@ func EncryptFile(chunkLength int, plainFilename string, key *[32]byte, dest stri
 	return cipherFilename, nil
 }
 
-func EncryptReaderToWriter(chunkLength int, msgType uint16, plainFile io.Reader, key *[32]byte, cipherFile io.Writer) error {
+func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, cipherFile io.Writer) error {
 	if key == nil || *key == [32]byte{} {
 		return ErrInvalidKey
 	}
@@ -135,7 +134,7 @@ func EncryptReaderToWriter(chunkLength int, msgType uint16, plainFile io.Reader,
 	// Header: Generate it, encrypt it, hash it
 	//
 
-	header, err := NewHeader(chunkLength, msgType)
+	header, err := NewHeader(msgType)
 	if err != nil {
 		return err
 	}
@@ -152,7 +151,7 @@ func EncryptReaderToWriter(chunkLength int, msgType uint16, plainFile io.Reader,
 	// Encrypt and hash each chunk
 	//
 
-	var plainb [DefaultEncryptChunkLength]byte
+	var plainb [EncryptChunkLength]byte
 	// staged chunk consisting of IsLastChunkByte + plain chunk
 	var staged []byte
 
@@ -215,31 +214,19 @@ func EncryptReaderToWriter(chunkLength int, msgType uint16, plainFile io.Reader,
 	return nil
 }
 
-func NewHeader(chunkLength int, msgType uint16) ([]byte, error) {
-	if chunkLength < MinChunkLength || chunkLength > MaxChunkLength {
-		return nil, ErrInvalidChunkLength
-	}
-
+func NewHeader(msgType uint16) ([]byte, error) {
 	if msgType == MessageTypeInvalid || msgType > MaxMsgType {
 		return nil, ErrInvalidMessageType
 	}
 
 	// Both are in big endian
 	header := []byte{
-		// Only working with chunkLength's lowest 3 bytes since it's a
-		// uint24
-
-		// Chunk size, aka chunk length
-		byte(chunkLength >> 16),
-		byte(chunkLength >> 8),
-		byte(chunkLength),
-
 		// Message type
 		byte(msgType >> 8),
 		byte(msgType),
 	}
 
-	// assert len(header) == 5
+	// assert len(header) == 2
 
 	return header, nil
 }

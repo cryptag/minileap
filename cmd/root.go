@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/cryptag/minileap"
 	"github.com/spf13/cobra"
 )
 
@@ -24,7 +23,6 @@ Combines the best of libsodium, miniLock, and LeapChat into one simple yet flexi
 type cliOptions struct {
 	EncryptFile_OutputFilename string
 	EncryptFile_ForceOverwrite bool
-	EncryptFile_ChunkSize      int
 
 	DecryptFile_DestinationDirectory string
 	DecryptFile_ForceOverwrite       bool
@@ -36,13 +34,6 @@ var (
 )
 
 func Execute() {
-	// TEMPORARY: Set defaults
-	options.EncryptFile_ChunkSize = minileap.DefaultEncryptChunkLength
-
-	// TODO: Remove the above and fully implement this instead:
-	//
-	// encryptFileCmd.Flags().StringVarP(&options.EncryptFile_ChunkSizeStr, "chunk-size", "s", "medium", "chunk size. Options: min (1024), small (65536), default (1_000_000) (default), max (16_777_215), or custom (uint24)")
-
 	//
 	// encrypt-file
 	//

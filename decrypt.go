@@ -91,7 +91,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 		return err
 	}
 
-	chunkSize, msgType, err := ParseDecryptedHeaderIntoValidFields(header)
+	msgType, err := ParseDecryptedHeaderIntoValidFields(header)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 	// Header fully verified :ok_hand:
 
 	isLastChunk := false
-	noncePlusEncryptedChunkPlusHash := make([]byte, chunkSize+DecryptChunkOverhead)
+	noncePlusEncryptedChunkPlusHash := make([]byte, EncryptChunkLength+DecryptChunkOverhead)
 	for true {
 		n, err = cipherFile.Read(noncePlusEncryptedChunkPlusHash)
 		if err != nil && err != io.EOF {
@@ -170,22 +170,13 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 	return plain, nil
 }
 
-func ParseDecryptedHeaderIntoValidFields(headerb []byte) (chunkSize int, msgType uint16, err error) {
+func ParseDecryptedHeaderIntoValidFields(headerb []byte) (msgType uint16, err error) {
 	if len(headerb) != EncryptHeaderLength {
 		err = fmt.Errorf("Decrypted header is %v bytes, expected %v\n", len(headerb), EncryptHeaderLength)
 		return
 	}
 
-	// Can't overflow on a 32-bit system because `headerb`'s chunk
-	// size is just a uint24, not uint32
-	chunkSize = int(headerb[0])<<16 | int(headerb[1])<<8 | int(headerb[2])
-
-	msgType = uint16(headerb[3])<<8 | uint16(headerb[4])
-
-	if chunkSize < MinChunkLength {
-		err = fmt.Errorf("Refusing to decrypt; chunk size is %v, which is below the minimum of %v\n", chunkSize, MinChunkLength)
-		return
-	}
+	msgType = uint16(headerb[0])<<8 | uint16(headerb[1])
 
 	if msgType == MessageTypeInvalid {
 		err = ErrInvalidMessageType

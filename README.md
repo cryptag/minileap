@@ -216,3 +216,52 @@ without detection even before a decryptor has checked its trailing
 Blake2b hash -- a nice little bonus.  Plus, NaCl/libsodium is widely
 available in various programming languages, making it an excellent
 choice to place at the foundation of miniLeap.
+
+
+#### Why is the chunk size 100,000 bytes?
+
+Because of the following benchmarks and related metrics from
+encrypting and decrypting a 15GB file:
+
+(Winners and might-a-well-be-ties are bolded --)
+
+---
+
+**Encrypting** and writing the result to disk:
+
+| Chunk size | Time          |
+|       ---: | :---          |
+| 1,000,000  |   2m51.776s   |
+|   100,000  | **1m54.216s** |
+|    65,000  | **1m48.053s** |
+|    10,000  | **1m47.861s** |
+
+---
+
+**Decrypting** and writing the result to disk:
+
+| Chunk size | Time          |
+|       ---: | :---          |
+| 1,000,000  |   2m38.011s   |
+|   100,000  | **1m37.533s** |
+|    65,000  | **1m38.739s** |
+|    10,000  |   2m3.418s    |
+
+---
+
+**Overhead**.  That is, the encrypted file size (when encrypted with
+the given chunk size) minus the original file size, divided by the
+original file size (~15GB):
+
+| Chunk size | Total overhead | Percentage overhead |
+|       ---: |           ---: | :---                |
+| 1,000,000  | **1,657,324**  | **0.0105%**         |
+|   100,000  |  16,571,944    |   0.105%            |
+|    65,000  |  25,495,264    |   0.16154%          |
+|    10,000  | 165,718,039    |   1.05%             |
+
+---
+
+The original rationale for allowing very small chunk sizes (i.e., <=
+10kb) was to support real-time use cases (e.g., voice calls).  In
+those situations, users should just use plain secretbox.
