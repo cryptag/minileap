@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/cryptag/minileap"
 	"github.com/spf13/cobra"
@@ -13,7 +14,8 @@ var decryptFileCmd = &cobra.Command{
 	Short:   "Decrypt the given file with the given email/passphrase combination",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
-			exit(fmt.Errorf("Usage: ml decrypt <filename>"))
+			cmd.Usage()
+			os.Exit(1)
 		}
 
 		// assert len(args) == 1
