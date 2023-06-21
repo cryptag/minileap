@@ -98,11 +98,20 @@ func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrit
 		return "", ErrInvalidKey
 	}
 
+	basePlainFilename := filepath.Base(plainFilename)
+
+	for _, char := range InvalidFilenameChars {
+		if strings.Contains(basePlainFilename, char) {
+			return "", fmt.Errorf("Filename `%s` contains invalid character `%s`!",
+				basePlainFilename, char)
+		}
+	}
+
 	if dest == "" {
 		// Save encrypted file with ".minileap" extension appended
 		cipherFilename = plainFilename + MiniLeapFileExtensionIncludingDot
 	} else if exists, err := DirExists(dest); exists && err != nil {
-		cipherFilename = filepath.Clean(dest) + string(filepath.Separator) + filepath.Base(plainFilename) + MiniLeapFileExtensionIncludingDot
+		cipherFilename = filepath.Clean(dest) + string(filepath.Separator) + basePlainFilename + MiniLeapFileExtensionIncludingDot
 	} else {
 		cipherFilename = dest
 	}
