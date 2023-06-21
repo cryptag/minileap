@@ -42,10 +42,15 @@ const (
 
 	MiniLeapFileExtension             = "minileap"
 	MiniLeapFileExtensionIncludingDot = "." + MiniLeapFileExtension
+
+	EncryptFilenameChunkLength = 256
 )
 
 const (
 	MaxMsgType = uint16(1<<16 - 1) // 65,535
+
+	MinFilenameLength = 1
+	MaxFilenameLength = 255
 
 	//
 	// Message types
@@ -68,6 +73,12 @@ var (
 	ErrChunkDecryptionFailed = fmt.Errorf("Chunk decryption failed")
 	ErrInvalidChunkHash      = fmt.Errorf("Invalid chunk hash")
 	ErrInvalidFinalHash      = fmt.Errorf("Invalid final hash")
+	ErrInvalidEncryptConfig  = fmt.Errorf("Invalid encryption configuration options")
+	ErrInvalidFilenameLength = fmt.Errorf("Invalid filename length")
+
+	// Don't let an attacker who's sending me a file control which
+	// directory it ends up in
+	InvalidFilenameChars = []string{`/`, `\`}
 
 	TestKey = &[ValidKeyLength]byte{
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
@@ -77,6 +88,11 @@ var (
 	}
 )
 
+type EncryptionConfig struct {
+	OrigFilename string
+	MsgType      uint16
+}
+
 func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
 	if key == nil || *key == [32]byte{} {
 		return "", ErrInvalidKey
@@ -85,13 +101,18 @@ func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrit
 	if dest == "" {
 		// Save encrypted file with ".minileap" extension appended
 		cipherFilename = plainFilename + MiniLeapFileExtensionIncludingDot
-	} else if DirExists(dest) {
+	} else if exists, err := DirExists(dest); exists && err != nil {
 		cipherFilename = filepath.Clean(dest) + string(filepath.Separator) + filepath.Base(plainFilename) + MiniLeapFileExtensionIncludingDot
 	} else {
 		cipherFilename = dest
 	}
 
-	if FileExists(cipherFilename) && !forceOverwrite {
+	exists, err := FileExists(cipherFilename)
+	if err != nil {
+		return "", err
+	}
+
+	if exists && !forceOverwrite {
 		return cipherFilename, fmt.Errorf("Encrypted file `%s` already exists and you've chosen not to overwrite existing files!", cipherFilename)
 	}
 
@@ -107,7 +128,12 @@ func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrit
 	}
 	defer cipherFile.Close()
 
-	err = EncryptReaderToWriter(MessageTypeFileWithFilename, plainFile, key, cipherFile)
+	encConfig := &EncryptionConfig{
+		OrigFilename: filepath.Base(plainFilename),
+		MsgType:      MessageTypeFileWithFilename,
+	}
+
+	err = EncryptReaderToWriter(MessageTypeFileWithFilename, plainFile, key, cipherFile, encConfig)
 	if err != nil {
 		return cipherFilename, err
 	}
@@ -115,15 +141,15 @@ func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrit
 	return cipherFilename, nil
 }
 
-func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, cipherFile io.Writer) error {
+func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, cipherFile io.Writer, encConfig *EncryptionConfig) error {
 	if key == nil || *key == [32]byte{} {
 		return ErrInvalidKey
 	}
 
-	// TODO: Add the filename in the first non-header chunk,
-	// padded to 255 bytes.  Make the first byte specify the
-	// length of the filename if needed, thus resulting in the
-	// first non-header chunk size being 256 bytes.
+	if msgType == MessageTypeFileWithFilename && (encConfig == nil || encConfig.OrigFilename == "") {
+		return fmt.Errorf("Must specify original filename when encrypting file: %w",
+			ErrInvalidEncryptConfig)
+	}
 
 	blake, err := blake2b.New512((*key)[:])
 	if err != nil {
@@ -145,6 +171,33 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 	_, err = cipherFile.Write(noncePlusEncryptedHeaderPlusHash)
 	if err != nil {
 		return err
+	}
+
+	//
+	// Encrypt filename if we are encrypting a file (and, thus, there is one)
+	//
+
+	if msgType == MessageTypeFileWithFilename {
+		filenameChunk, err := NewFilenameChunk(encConfig.OrigFilename)
+		if err != nil {
+			return err
+		}
+
+		noncePlusFilename, err := EncryptAndHashChunk(filenameChunk, key, blake)
+		if err != nil {
+			return err
+		}
+
+		n, err := cipherFile.Write(noncePlusFilename)
+		if err != nil {
+			return err
+		}
+
+		if n != len(noncePlusFilename) {
+			return fmt.Errorf("Wrote %v bytes of filename, should have written %v!", n, len(noncePlusFilename))
+		}
+
+		// FALL THROUGH
 	}
 
 	//
@@ -231,6 +284,45 @@ func NewHeader(msgType uint16) ([]byte, error) {
 	return header, nil
 }
 
+// NewFilenameChunk returns a []byte of length 256 with the following
+// structure: `[ 1 byte: length of original filename || N bytes:
+// original filename || 255 - N bytes: random data (padding) ]`
+func NewFilenameChunk(origFilename string) ([]byte, error) {
+	// Must convert to []byte first to correctly support UTF-8;
+	// len(str) counts runes, not bytes
+	lenOrigFilename := len([]byte(origFilename))
+
+	if lenOrigFilename < MinFilenameLength || lenOrigFilename > MaxFilenameLength {
+		return nil, fmt.Errorf("origFilename may not be %v: %w",
+			lenOrigFilename, ErrInvalidFilenameLength)
+	}
+
+	// [  0 0 0 0 0 ... ]
+	filenameChunk := make([]byte, EncryptFilenameChunkLength)
+
+	// [ 14 0 0 0 0 ... ] where 14 == lenOrigFilename
+	filenameChunk[0] = byte(lenOrigFilename)
+
+	// [ 14 m y f i l e n a m e . t x t 0 0 0 0 0 ... ] where
+	// origFilename == "myfilename.txt"
+	n := copy(filenameChunk[1:], []byte(origFilename))
+	if n != lenOrigFilename {
+		return nil, fmt.Errorf("Only copied %v bytes of origFilename, not %v!", n, lenOrigFilename)
+	}
+
+	// [ 14 m y f i l e n a m e . t x t R A N D O M D A T A H E R E ... ]
+	n, err := rand.Reader.Read(filenameChunk[1+lenOrigFilename:])
+	if err != nil {
+		return nil, err
+	}
+	nWanted := EncryptFilenameChunkLength - lenOrigFilename - 1
+	if n != nWanted {
+		return nil, fmt.Errorf("Only read %v random bytes, not %v!", n, nWanted)
+	}
+
+	return filenameChunk, nil
+}
+
 // EncryptAndHashChunk encrypts and hashes the given data. Unless you
 // are encrypting a miniLeap header or filename, the first argument
 // should consist of the data you want to encrypt prefixed by an
@@ -280,20 +372,26 @@ func IsLastChunkBoolToByte(isLastChunk bool) byte {
 }
 
 // From https://www.tutorialspoint.com/how-to-check-if-a-file-exists-in-golang
-func FileExists(filename string) bool {
+func FileExists(filename string) (bool, error) {
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
-		return false
+		return false, nil
 	}
-	return !info.IsDir()
+	if err != nil {
+		return false, err
+	}
+	return !info.IsDir(), nil
 }
 
-func DirExists(dir string) bool {
+func DirExists(dir string) (bool, error) {
 	info, err := os.Stat(dir)
 	if os.IsNotExist(err) {
-		return false
+		return false, nil
 	}
-	return info.IsDir()
+	if err != nil {
+		return false, err
+	}
+	return info.IsDir(), nil
 }
 
 func MustGetFromStdinSecure() string {

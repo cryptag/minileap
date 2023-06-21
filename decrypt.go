@@ -32,7 +32,12 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 	slash := string(filepath.Separator)
 	plainFilename = filepath.Clean(dest) + slash + filepath.Base(plainFilename)
 
-	if FileExists(plainFilename) && !forceOverwrite {
+	exists, err := FileExists(plainFilename)
+	if err != nil {
+		return plainFilename, err
+	}
+
+	if exists && !forceOverwrite {
 		return plainFilename, fmt.Errorf("Unencrypted file `%s` already exists and you've chosen not to overwrite existing files!", plainFilename)
 	}
 
@@ -48,27 +53,62 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 	}
 	defer plainFile.Close()
 
-	err = DecryptReaderToWriter(cipherFile, key, plainFile)
+	// TODO: Consider changing this function signature to return
+	// `config` instead of `plainFilename`
+
+	config, err := DecryptReaderToWriter(cipherFile, key, plainFile)
 	if err != nil {
 		return plainFilename, err
+	}
+
+	// Try renaming to the correct (original) filename
+	if config.OrigFilename != filepath.Base(plainFilename) {
+		origFilename := filepath.Clean(dest) + slash + filepath.Base(config.OrigFilename)
+		exists, err := FileExists(origFilename)
+		if err != nil {
+			return plainFilename, err
+		}
+
+		if exists && !forceOverwrite {
+			// TODO: Decide whether to return error here
+			fmt.Fprintf(os.Stderr, "Unencrypted file `%s` already exists and"+
+				" you've chosen not to overwrite existing files! NOT renaming"+
+				" decrypted file `%s` to `%s` like you requested.\n",
+				origFilename, plainFilename, origFilename)
+
+			return plainFilename, nil
+		}
+
+		err = os.Rename(plainFilename, origFilename)
+		if err != nil {
+			return plainFilename, nil
+		}
+
+		// Return location of where file ended up (after renaming)
+		return origFilename, nil
 	}
 
 	return plainFilename, nil
 }
 
-func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer) error {
+// DecryptReaderToWriter performs streaming decryption on cipherFile
+// using key and writes the decrypted result to plainFile.
+// config.OrigFilename will be non-empty if cipherFile is of type
+// MessageTypeFileWithFilename. config may be non-nil even in the case
+// of an error in order to relay potentially-relevant information to
+// the caller.
+func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer) (config *EncryptionConfig, err error) {
 	// TODO: Run `os.Remove(plainFilename)` on error
+
+	if key == nil || *key == [32]byte{} {
+		return nil, ErrInvalidKey
+	}
 
 	// Hashers ftw
 	blake, err := blake2b.New512((*key)[:])
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	// TODO: Expect the filename in the first non-header chunk,
-	// padded to 255 bytes.  Make the first byte specify the
-	// length of the filename if needed, thus resulting in the
-	// first non-header chunk size being 256 bytes.
 
 	//
 	// Header: Decrypt it, verify its hash
@@ -78,27 +118,68 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 
 	n, err := cipherFile.Read(noncePlusEncryptedHeaderPlusHash)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if n != DecryptHeaderLength {
-		return fmt.Errorf("Decrypting header: Wanted %v bytes, got %v\n",
+		return nil, fmt.Errorf("Decrypting header: Wanted %v bytes, got %v",
 			DecryptHeaderLength, n)
 	}
 
 	header, err := DecryptAndVerifyChunk(noncePlusEncryptedHeaderPlusHash, key, blake)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	msgType, err := ParseDecryptedHeaderIntoValidFields(header)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if msgType != MessageTypeFileWithFilename {
-		return fmt.Errorf("TEMPORARY: Got msgType == %v, wanted %v\n",
-			msgType, MessageTypeFileWithFilename)
+	config = &EncryptionConfig{
+		MsgType: msgType,
+	}
+
+	//
+	// Decrypt filename chunk if we are decrypting a file (and, thus, there is one)
+	//
+
+	if msgType == MessageTypeFileWithFilename {
+		noncePlusEncryptedChunkPlusHash := make([]byte, EncryptFilenameChunkLength+NonceCryptoBlakeOverhead)
+		n, err := cipherFile.Read(noncePlusEncryptedChunkPlusHash)
+		if err != nil && err != io.EOF {
+			return nil, err
+		}
+
+		if n != cap(noncePlusEncryptedChunkPlusHash) {
+			return nil, fmt.Errorf("Error decrypting filename: Wanted to read"+
+				" %v bytes, read %v bytes instead!",
+				cap(noncePlusEncryptedChunkPlusHash), n)
+		}
+
+		decryptedFilenameBytes, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash, key, blake)
+		if err != nil {
+			return nil, err
+		}
+
+		// Filename length stored in first byte
+		realLength := int(decryptedFilenameBytes[0])
+
+		// Grab everything after the first byte and before the
+		// trailing random padding
+		decryptedFilename := string(decryptedFilenameBytes[1 : 1+realLength])
+
+		for _, char := range InvalidFilenameChars {
+			if strings.Contains(decryptedFilename, char) {
+				return nil, fmt.Errorf("Decrypted filename `%s` contains"+
+					" invalid character `%s`!", decryptedFilename, char)
+			}
+		}
+
+		// Set global-ish var
+		config.OrigFilename = decryptedFilename
+
+		// FALL THROUGH
 	}
 
 	// Header fully verified :ok_hand:
@@ -108,7 +189,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 	for true {
 		n, err = cipherFile.Read(noncePlusEncryptedChunkPlusHash)
 		if err != nil && err != io.EOF {
-			return err
+			return config, err
 		}
 
 		if n == 0 {
@@ -117,14 +198,14 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 
 		isLastPlusDecryptedChunk, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash[:n], key, blake)
 		if err != nil {
-			return err
+			return config, err
 		}
 
 		isLastChunk = IsLastChunkByte(isLastPlusDecryptedChunk[0])
 
 		_, err = plainFile.Write(isLastPlusDecryptedChunk[1:])
 		if err != nil {
-			return err
+			return config, err
 		}
 
 		if isLastChunk {
@@ -132,11 +213,12 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 		}
 	}
 
+	// TODO: Consider turning this into an error
 	if !isLastChunk {
 		fmt.Fprintf(os.Stderr, "The file just decrypted may have been truncated! Or it could be a bug in the code that did the encryption; that's all we know.\n")
 	}
 
-	return nil
+	return config, nil
 }
 
 func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {

@@ -22,7 +22,12 @@ var encryptFileCmd = &cobra.Command{
 		// TODO: Loop over all files listed
 		filename := args[0]
 
-		if !minileap.FileExists(filename) {
+		exists, err := minileap.FileExists(filename)
+		if err != nil {
+			exit(err)
+		}
+
+		if !exists {
 			exit(fmt.Errorf("File `%s` does not exist and thus cannot be encrypted!", filename))
 		}
 

@@ -20,7 +20,12 @@ var decryptFileCmd = &cobra.Command{
 
 		filename := args[0]
 
-		if !minileap.FileExists(filename) {
+		exists, err := minileap.FileExists(filename)
+		if err != nil {
+			exit(err)
+		}
+
+		if !exists {
 			exit(fmt.Errorf("File `%s` does not exist and thus cannot be decrypted!", filename))
 		}
 
