@@ -127,7 +127,7 @@ func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrit
 
 	plainFile, err := os.Open(plainFilename)
 	if err != nil {
-		return "", err
+		return cipherFilename, err
 	}
 	defer plainFile.Close()
 
