@@ -25,7 +25,7 @@ const (
 
 	Blake2bHashLength = blake2b.Size
 
-	// 104 == 24 + 16 + 64. Does not include IsLastChunkIndicatorLength
+	// 104 == 24 + 16 + 64. Does not include IsLastChunkIndicatorLength.
 	NonceCryptoBlakeOverhead = NonceLength + secretbox.Overhead + Blake2bHashLength
 
 	// 2-byte message type (big endian)
@@ -272,7 +272,7 @@ func NewHeader(msgType uint16) ([]byte, error) {
 		return nil, ErrInvalidMessageType
 	}
 
-	// Both are in big endian
+	// Big endian
 	header := []byte{
 		// Message type
 		byte(msgType >> 8),
