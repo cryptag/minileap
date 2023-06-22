@@ -300,9 +300,12 @@ func ParseDecryptedHeaderIntoValidFields(headerb []byte) (msgType uint16, err er
 	return
 }
 
+// IsLastChunkByte checks whether the given byte indicates that the
+// chunk it represents is the last chunk in a miniLeap message. (An
+// even byte means this is not a last chunk byte, an odd one means it
+// is.)
 func IsLastChunkByte(isLastChunk byte) bool {
-	// TODO: Make more dynamic and harder to guess
-	return isLastChunk == 1
+	return isLastChunk&1 == 1
 }
 
 func MustDeriveKeypairFromUserInput(requirePassphrase bool) *taber.Keys {

@@ -264,7 +264,10 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 				// We have new data _and_ staged data, so set
 				// `staged` as _not_ the last chunk, then encrypt
 				// and write it.
-				staged[0] = IsLastChunkBoolToByte(false)
+				staged[0], err = IsLastChunkBoolToByte(false)
+				if err != nil {
+					return err
+				}
 				err = encryptAndWriteStaged()
 				if err != nil {
 					return err
@@ -284,7 +287,10 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 			// data. Therefore what is staged is the last
 			// chunk. So let's mark it as such, then encrypt
 			// and write it.
-			staged[0] = IsLastChunkBoolToByte(true)
+			staged[0], err = IsLastChunkBoolToByte(true)
+			if err != nil {
+				return err
+			}
 			err = encryptAndWriteStaged()
 			if err != nil {
 				return err
@@ -392,12 +398,28 @@ func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]b
 	return cipher, nil
 }
 
-func IsLastChunkBoolToByte(isLastChunk bool) byte {
-	// TODO: Make more dynamic and harder to guess
-	if isLastChunk {
-		return 1
+// IsLastChunkBoolToByte takes the given bool and turns it into a
+// valid indicator that this is the last chunk if isLastChunk is true,
+// or an indicator that this is not the last chunk if isLastChunk is
+// false. (`isLastChunk == false` results in the returned byte being
+// even, and `isLastChunk == true` results in the returned byte being
+// odd.)
+func IsLastChunkBoolToByte(isLastChunk bool) (byte, error) {
+	b := make([]byte, 1)
+	_, err := rand.Read(b)
+	if err != nil {
+		return 0, err
 	}
-	return 0
+
+	randByte := b[0]
+
+	if isLastChunk {
+		// Ensure odd
+		return randByte | 1, nil
+	}
+
+	// Ensure even
+	return randByte & 0xFE, nil
 }
 
 // From https://www.tutorialspoint.com/how-to-check-if-a-file-exists-in-golang
