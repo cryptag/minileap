@@ -49,14 +49,14 @@ var encryptFileCmd = &cobra.Command{
 			exit(err)
 		}
 
-		fmt.Printf("Using miniLock ID %s to derive symmetric key to encrypt file `%s` ...\n", mID, filename)
+		fmt.Fprintf(os.Stderr, "Using miniLock ID %s to derive symmetric key to encrypt file `%s` ...\n", mID, filename)
 
 		cipherFilename, err := minileap.EncryptFile(filename, keyPairPrivate32, options.EncryptFile_OutputFilename, options.EncryptFile_ForceOverwrite)
 		if err != nil {
 			exit(err)
 		}
 
-		fmt.Printf("Encrypted file successfully saved to `%s`\n", cipherFilename)
+		fmt.Fprintf(os.Stderr, "Encrypted file successfully saved to `%s`\n", cipherFilename)
 	},
 }
 

@@ -408,7 +408,7 @@ func MustGetFromStdinSecure() string {
 	if err != nil {
 		exit(err)
 	}
-	fmt.Println("")
+	fmt.Fprintf(os.Stderr, "\n")
 
 	return input
 }
