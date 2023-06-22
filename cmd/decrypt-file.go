@@ -48,13 +48,24 @@ var decryptFileCmd = &cobra.Command{
 			exit(err)
 		}
 
-		fmt.Fprintf(os.Stderr, "Using miniLock ID %s to derive symmetric key to decrypt file `%s` ...\n", mID, filename)
+		fmt.Fprintf(os.Stderr, "Using miniLock ID %s to derive symmetric key"+
+			" to decrypt file `%s` ...\n", mID, filename)
 
-		plainFilename, err := minileap.DecryptFile(filename, keyPairPrivate32, options.DecryptFile_DestinationDirectory, options.DecryptFile_ForceOverwrite)
+		config, err := minileap.DecryptFile(filename, keyPairPrivate32, options.DecryptFile_DestinationDirectory, options.DecryptFile_ForceOverwrite)
 		if err != nil {
 			exit(err)
 		}
 
-		fmt.Fprintf(os.Stderr, "Decrypted file successfully saved to `%s`\n", plainFilename)
+		if config.OrigFilename == "" {
+			// Just decrypted a file of message type non-file and
+			// wrote it to stdout
+			fmt.Fprintf(os.Stderr, "File with underlying message type %v successfully decrypted",
+				minileap.MessageTypeName(config.MsgType))
+		} else if options.DecryptFile_DestinationDirectory != "-" {
+			// Just decrypted a file of MessageTypeFileWithFilename
+			// and wrote it to config.OrigFilename
+			fmt.Fprintf(os.Stderr, "Decrypted file successfully saved to `%s`\n",
+				config.OrigFilename)
+		}
 	},
 }

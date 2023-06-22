@@ -26,6 +26,9 @@ type cliOptions struct {
 
 	DecryptFile_DestinationDirectory string
 	DecryptFile_ForceOverwrite       bool
+
+	EncryptText_OutputFilename string
+	EncryptText_ForceOverwrite bool
 }
 
 // ~Global vars that cobra ~forces us to have
@@ -37,16 +40,23 @@ func Execute() {
 	//
 	// encrypt-file
 	//
-	encryptFileCmd.Flags().BoolVar(&options.EncryptFile_ForceOverwrite, "force", false, "force overwrite of output file?")
 	encryptFileCmd.Flags().StringVarP(&options.EncryptFile_OutputFilename, "output", "o", "", "output filename")
+	encryptFileCmd.Flags().BoolVar(&options.EncryptFile_ForceOverwrite, "force", false, "force overwrite of output file?")
 	rootCmd.AddCommand(encryptFileCmd)
 
 	//
 	// decrypt-file
 	//
+	decryptFileCmd.Flags().StringVarP(&options.DecryptFile_DestinationDirectory, "dest", "d", ".", "destination directory (set to '-' to write to stdout)")
 	decryptFileCmd.Flags().BoolVar(&options.DecryptFile_ForceOverwrite, "force", false, "force overwrite of output file?")
-	decryptFileCmd.Flags().StringVarP(&options.DecryptFile_DestinationDirectory, "dest", "d", ".", "destination directory")
 	rootCmd.AddCommand(decryptFileCmd)
+
+	//
+	// encrypt-text
+	//
+	encryptTextCmd.Flags().StringVarP(&options.EncryptText_OutputFilename, "output", "o", "", "output filename")
+	encryptTextCmd.Flags().BoolVar(&options.EncryptText_ForceOverwrite, "force", false, "force overwrite of output file?")
+	rootCmd.AddCommand(encryptTextCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

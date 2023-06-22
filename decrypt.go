@@ -14,81 +14,113 @@ import (
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
-func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwrite bool) (plainFilename string, err error) {
+const (
+	slash = string(filepath.Separator)
+)
+
+// DecrytFile decrypts the file located at cipherFilename to the
+// destination directory dest. If dest == "-", the decrypted miniLeap
+// message will be written to stdout, discarding the filename if the
+// underlying message type is MessageTypeFileWithFilename.
+func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwrite bool) (*EncryptionConfig, error) {
 	if key == nil || *key == [32]byte{} {
-		return "", ErrInvalidKey
+		return nil, ErrInvalidKey
 	}
 
-	if strings.HasSuffix(cipherFilename, MiniLeapFileExtensionIncludingDot) {
-		// Save decrypted file with `.minileap` extension removed
-		plainFilename = cipherFilename[:len(cipherFilename)-len(MiniLeapFileExtensionIncludingDot)]
-	}
+	config := &EncryptionConfig{}
+	plainFile := os.Stdout
+	var plainFilename string
 
-	if plainFilename == "" {
-		plainFilename = cipherFilename + ".dec"
-	}
+	if dest != "-" {
+		if strings.HasSuffix(cipherFilename, MiniLeapFileExtensionIncludingDot) {
+			// Save decrypted file with `.minileap` extension removed
+			plainFilename = cipherFilename[:len(cipherFilename)-len(MiniLeapFileExtensionIncludingDot)]
+		} else {
+			plainFilename = cipherFilename + ".dec"
+		}
 
-	// Prepend destination dir to `plainFilename`
-	slash := string(filepath.Separator)
-	plainFilename = filepath.Clean(dest) + slash + filepath.Base(plainFilename)
+		// Prepend destination dir to `plainFilename`
+		plainFilename = filepath.Clean(dest) + slash + filepath.Base(plainFilename)
+		exists, err := FileExists(plainFilename)
+		if err != nil {
+			return nil, err
+		}
 
-	exists, err := FileExists(plainFilename)
-	if err != nil {
-		return plainFilename, err
-	}
+		if exists && !forceOverwrite {
+			return nil, fmt.Errorf("Intermediate destination file `%s` already"+
+				" exists and you've chosen not to overwrite existing files!",
+				plainFilename)
+		}
 
-	if exists && !forceOverwrite {
-		return plainFilename, fmt.Errorf("Unencrypted file `%s` already exists and you've chosen not to overwrite existing files!", plainFilename)
+		//
+		// Set 2 global-ish vars
+		//
+
+		config.OrigFilename = plainFilename
+
+		plainFile, err = os.Create(plainFilename)
+		if err != nil {
+			return config, err
+		}
+		defer plainFile.Close()
+
+		// FALL THROUGH
 	}
 
 	cipherFile, err := os.Open(cipherFilename)
 	if err != nil {
-		return "", err
+		return config, err
 	}
 	defer cipherFile.Close()
-
-	plainFile, err := os.Create(plainFilename)
-	if err != nil {
-		return plainFilename, err
-	}
-	defer plainFile.Close()
 
 	// TODO: Consider changing this function signature to return
 	// `config` instead of `plainFilename`
 
-	config, err := DecryptReaderToWriter(cipherFile, key, plainFile)
+	// Set global-ish var `config`
+	config, err = DecryptReaderToWriter(cipherFile, key, plainFile)
 	if err != nil {
-		return plainFilename, err
+		return config, err
 	}
 
+	// We have now decrypted cipherFilename and saved it to
+	// plainFilename, but if config.OrigFilename is populated then we
+	// should really save it there instead so as to preserve the
+	// original filename.
+
 	// Try renaming to the correct (original) filename
-	if config.OrigFilename != filepath.Base(plainFilename) {
+	if dest != "-" && config.OrigFilename != filepath.Base(plainFilename) {
 		origFilename := filepath.Clean(dest) + slash + filepath.Base(config.OrigFilename)
 		exists, err := FileExists(origFilename)
 		if err != nil {
-			return plainFilename, err
+			return config, err
 		}
 
 		if exists && !forceOverwrite {
 			// TODO: Decide whether to return error here
-			fmt.Fprintf(os.Stderr, "Unencrypted file `%s` already exists and"+
-				" you've chosen not to overwrite existing files! NOT renaming"+
-				" decrypted file `%s` to `%s` like you requested.\n",
-				origFilename, plainFilename, origFilename)
+			fmt.Fprintf(os.Stderr, "File successfully decrypted to `%s`."+
+				" Unencrypted file `%s` already exists and you've chosen not"+
+				" to overwrite existing files! NOT renaming decrypted file"+
+				" `%[1]s` to `%[2]s` as you requested, sorry!\n",
+				plainFilename, origFilename)
 
-			return plainFilename, nil
+			// TODO: Replace with `config.SavedLocation` or similar
+			// and keep config.OrigFilename intact.
+			config.OrigFilename = plainFilename
+
+			return config, nil
 		}
 
 		err = os.Rename(plainFilename, origFilename)
 		if err != nil {
-			return plainFilename, nil
+			return config, nil
 		}
 
-		// Return location of where file ended up (after renaming)
-		return origFilename, nil
+		config.OrigFilename = origFilename
+
+		// FALL THROUGH
 	}
 
-	return plainFilename, nil
+	return config, nil
 }
 
 // DecryptReaderToWriter performs streaming decryption on cipherFile

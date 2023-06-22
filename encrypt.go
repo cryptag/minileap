@@ -64,6 +64,26 @@ const (
 	MessageTypeFileWithFilenameAndPath = uint16(6)
 )
 
+func MessageTypeName(msgType uint16) string {
+	switch msgType {
+	case MessageTypeInvalid:
+		return fmt.Sprintf("MessageTypeInvalid (number %v)", msgType)
+	case MessageTypeText:
+		return fmt.Sprintf("MessageTypeText (number %v)", msgType)
+	case MessageTypeURL:
+		return fmt.Sprintf("MessageTypeURL (number %v)", msgType)
+	case MessageTypeCommand:
+		return fmt.Sprintf("MessageTypeCommand (number %v)", msgType)
+	case MessageTypePassphrase:
+		return fmt.Sprintf("MessageTypePassphrase (number %v)", msgType)
+	case MessageTypeFileWithFilename:
+		return fmt.Sprintf("MessageTypeFileWithFilename (number %v)", msgType)
+	case MessageTypeFileWithFilenameAndPath:
+		return fmt.Sprintf("MessageTypeFileWithFilenameAndPath (number %v)", msgType)
+	}
+	return fmt.Sprintf("Unknown (number %v)", msgType)
+}
+
 var (
 	ErrInvalidNonce          = fmt.Errorf("Invalid nonce")
 	ErrInvalidKey            = fmt.Errorf("Invalid key")
