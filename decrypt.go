@@ -321,7 +321,6 @@ func MustDeriveKeypairFromUserInput(requirePassphrase bool, email string) *taber
 			exit(fmt.Errorf("Passphrase required but not provided"))
 		}
 
-		fmt.Fprintf(os.Stderr, "Generating random passphrase...\n")
 		var err error
 		passphrase, err = RandomPassphrase(25)
 		if err != nil {
