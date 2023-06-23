@@ -6,16 +6,24 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/cryptag/go-minilock/taber"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/nacl/secretbox"
 	"golang.org/x/crypto/ssh/terminal"
 )
+
+func init() {
+	if os.Getenv("DEBUG") == "1" {
+		log.SetLevel(log.DebugLevel)
+	} else {
+		log.SetLevel(log.FatalLevel)
+	}
+}
 
 const (
 	NonceLength = 24

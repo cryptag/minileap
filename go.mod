@@ -12,6 +12,7 @@ require (
 	github.com/cathalgarvey/base58 v0.0.0-20150930172411-5e83fd6f66e3 // indirect
 	github.com/dchest/blake2s v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/term v0.8.0 // indirect

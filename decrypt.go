@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/cryptag/go-minilock/taber"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/nacl/secretbox"
 )
@@ -158,6 +159,8 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 			DecryptHeaderLength, n)
 	}
 
+	log.Debugf("Decrypting and verifying header chunk...")
+
 	header, err := DecryptAndVerifyChunk(noncePlusEncryptedHeaderPlusHash, key, blake)
 	if err != nil {
 		return nil, err
@@ -171,6 +174,8 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 	config = &EncryptionConfig{
 		MsgType: msgType,
 	}
+
+	log.Debugf("Parsed header; msgType: `%s`", MessageTypeName(msgType))
 
 	//
 	// Decrypt filename chunk if we are decrypting a file (and, thus, there is one)
@@ -188,6 +193,8 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 				" %v bytes, read %v bytes instead!",
 				cap(noncePlusEncryptedChunkPlusHash), n)
 		}
+
+		log.Debugf("Decrypting and verifying filename chunk...")
 
 		decryptedFilenameBytes, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash, key, blake)
 		if err != nil {
@@ -215,6 +222,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 	}
 
 	// Header fully verified :ok_hand:
+	log.Debugf("Header chunk: Successfully decrypted, verified, and parsed")
 
 	isLastChunk := false
 	noncePlusEncryptedChunkPlusHash := make([]byte, EncryptChunkLength+DecryptChunkOverhead)
@@ -223,6 +231,8 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 		if err != nil && err != io.EOF {
 			return config, err
 		}
+
+		log.Debugf("Read %v bytes from cipherFile", n)
 
 		if n == 0 {
 			break
@@ -258,6 +268,9 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 		return nil, ErrInvalidChunkLength
 	}
 
+	log.Debugf("Decrypting and verifying %v-byte nonce + ciphertext + hash",
+		len(noncePlusEncryptedChunkPlusHash))
+
 	nonce, err := ConvertNonce(noncePlusEncryptedChunkPlusHash[:NonceLength])
 	if err != nil {
 		return nil, err
@@ -267,7 +280,8 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 
 	plain, ok := secretbox.Open(nil, cipher, nonce, key)
 	if !ok {
-		return nil, ErrChunkDecryptionFailed
+		return nil, fmt.Errorf("Error decrypting %v-byte secretbox message: %w",
+			len(cipher), ErrChunkDecryptionFailed)
 	}
 
 	blake.Write(noncePlusEncryptedChunkPlusHash[:NonceLength])
