@@ -205,10 +205,10 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 	if err != nil {
 		return err
 	}
-	_, err = cipherFile.Write(noncePlusEncryptedHeaderPlusHash)
-	if err != nil {
-		return err
-	}
+
+	// Write this below, for efficiency's sake, and to not reveal much
+	// about the structure of the files we're sending
+	firstChunkEnc := noncePlusEncryptedHeaderPlusHash
 
 	//
 	// Encrypt filename if we are encrypting a file (and, thus, there is one)
@@ -225,14 +225,7 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 			return err
 		}
 
-		n, err := cipherFile.Write(noncePlusFilename)
-		if err != nil {
-			return err
-		}
-
-		if n != len(noncePlusFilename) {
-			return fmt.Errorf("Wrote %v bytes of filename, should have written %v!", n, len(noncePlusFilename))
-		}
+		firstChunkEnc = append(firstChunkEnc, noncePlusFilename...)
 
 		// FALL THROUGH
 	}
@@ -241,6 +234,7 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 	// Encrypt and hash each chunk
 	//
 
+	isFirstChunkWritten := false
 	var plainb [EncryptChunkLength]byte
 	// staged chunk consisting of IsLastChunkByte + plain chunk
 	var staged []byte
@@ -251,11 +245,20 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 		if err != nil {
 			return err
 		}
+
+		if !isFirstChunkWritten {
+			// Write the header chunk + filename chunk (if exists) +
+			// first data chunk all at once
+			noncePlusEncryptedChunkPlusHash = append(firstChunkEnc,
+				noncePlusEncryptedChunkPlusHash...)
+		}
+
 		_, err = cipherFile.Write(noncePlusEncryptedChunkPlusHash)
 		if err != nil {
 			return err
 		}
 		staged = nil
+		isFirstChunkWritten = true
 
 		return nil
 	}
