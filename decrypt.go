@@ -105,7 +105,7 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 
 			// TODO: Replace with `config.SavedLocation` or similar
 			// and keep config.OrigFilename intact.
-			config.OrigFilename = plainFilename
+			config.OrigFilename = filepath.Clean(dest) + slash + filepath.Base(plainFilename)
 
 			return config, nil
 		}
