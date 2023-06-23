@@ -308,10 +308,7 @@ func IsLastChunkByte(isLastChunk byte) bool {
 	return isLastChunk&1 == 1
 }
 
-func MustDeriveKeypairFromUserInput(requirePassphrase bool) *taber.Keys {
-	fmt.Fprintf(os.Stderr, "Email (optional): ")
-	email := MustGetFromStdinStripped()
-
+func MustDeriveKeypairFromUserInput(requirePassphrase bool, email string) *taber.Keys {
 	if requirePassphrase {
 		fmt.Fprintf(os.Stderr, "Passphrase: ")
 	} else {

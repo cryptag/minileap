@@ -52,7 +52,7 @@ var encryptTextCmd = &cobra.Command{
 		// Derive keypair from user-specified email and password
 
 		requirePassphrase := false
-		keyPair := minileap.MustDeriveKeypairFromUserInput(requirePassphrase)
+		keyPair := minileap.MustDeriveKeypairFromUserInput(requirePassphrase, options.EncryptText_Email)
 
 		keyPairPrivate32, err := minileap.ConvertKey(keyPair.Private)
 		if err != nil {
