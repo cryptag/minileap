@@ -2,6 +2,7 @@ package minileap
 
 import (
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -17,6 +18,10 @@ import (
 
 const (
 	slash = string(filepath.Separator)
+)
+
+var (
+	ErrNotLastChunk = errors.New("The file just decrypted may have been truncated! Or it could be a bug in the code that did the encryption, or, most likely, we've just decrypted the beginning of a miniLeap file, but not the whole thing; that's all we know.")
 )
 
 // DecrytFile decrypts the file located at cipherFilename to the
@@ -78,7 +83,7 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 	// `config` instead of `plainFilename`
 
 	// Set global-ish var `config`
-	config, err = DecryptReaderToWriter(cipherFile, key, plainFile)
+	config, err = DecryptReaderToWriter(cipherFile, key, plainFile, nil)
 	if err != nil {
 		return config, err
 	}
@@ -129,101 +134,113 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 // config.OrigFilename will be non-empty if cipherFile is of type
 // MessageTypeFileWithFilename. config may be non-nil even in the case
 // of an error in order to relay potentially-relevant information to
-// the caller.
-func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer) (config *EncryptionConfig, err error) {
+// the caller. If blake is nil this means we are decrypting the first
+// chunk in a miniLeap file, and a new Blake2b hasher will be created
+// and used.
+func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer, blake hash.Hash) (config *EncryptionConfig, err error) {
 	// TODO: Run `os.Remove(plainFilename)` on error
 
 	if key == nil || *key == empty32ByteArray {
 		return nil, ErrInvalidKey
 	}
 
-	// Hashers ftw
-	blake, err := blake2b.New512(nil)
-	if err != nil {
-		return nil, err
+	isFirstChunk := (blake == nil)
+
+	if isFirstChunk {
+		newBlake, err := blake2b.New512(nil)
+		if err != nil {
+			return nil, err
+		}
+
+		blake = newBlake
+
+		// FALL THROUGH
 	}
 
 	//
 	// Header: Decrypt it, verify its hash
 	//
 
-	noncePlusEncryptedHeaderPlusHash := make([]byte, DecryptHeaderLength)
+	config = &EncryptionConfig{}
 
-	n, err := cipherFile.Read(noncePlusEncryptedHeaderPlusHash)
-	if err != nil {
-		return nil, err
-	}
+	if isFirstChunk {
+		noncePlusEncryptedHeaderPlusHash := make([]byte, DecryptHeaderLength)
 
-	if n != DecryptHeaderLength {
-		return nil, fmt.Errorf("Decrypting header: Wanted %v bytes, got %v",
-			DecryptHeaderLength, n)
-	}
-
-	log.Debugf("Decrypting and verifying header chunk...")
-
-	header, err := DecryptAndVerifyChunk(noncePlusEncryptedHeaderPlusHash, key, blake)
-	if err != nil {
-		return nil, err
-	}
-
-	msgType, err := ParseDecryptedHeaderIntoValidFields(header)
-	if err != nil {
-		return nil, err
-	}
-
-	config = &EncryptionConfig{
-		MsgType: msgType,
-	}
-
-	log.Debugf("Parsed header; msgType: `%s`", MessageTypeName(msgType))
-
-	//
-	// Decrypt filename chunk if we are decrypting a file (and, thus, there is one)
-	//
-
-	if msgType == MessageTypeFileWithFilename {
-		noncePlusEncryptedChunkPlusHash := make([]byte, EncryptFilenameChunkLength+NonceCryptoBlakeOverhead)
-		n, err := cipherFile.Read(noncePlusEncryptedChunkPlusHash)
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-
-		if n != cap(noncePlusEncryptedChunkPlusHash) {
-			return nil, fmt.Errorf("Error decrypting filename: Wanted to read"+
-				" %v bytes, read %v bytes instead!",
-				cap(noncePlusEncryptedChunkPlusHash), n)
-		}
-
-		log.Debugf("Decrypting and verifying filename chunk...")
-
-		decryptedFilenameBytes, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash, key, blake)
+		n, err := cipherFile.Read(noncePlusEncryptedHeaderPlusHash)
 		if err != nil {
 			return nil, err
 		}
 
-		// Filename length stored in first byte
-		realLength := int(decryptedFilenameBytes[0])
-
-		// Grab everything after the first byte and before the
-		// trailing random padding
-		decryptedFilename := string(decryptedFilenameBytes[1 : 1+realLength])
-
-		for _, char := range InvalidFilenameChars {
-			if strings.Contains(decryptedFilename, char) {
-				return nil, fmt.Errorf("Decrypted filename `%s` contains"+
-					" invalid character `%s`!", decryptedFilename, char)
-			}
+		if n != DecryptHeaderLength {
+			return nil, fmt.Errorf("Decrypting header: Wanted %v bytes, got %v",
+				DecryptHeaderLength, n)
 		}
 
-		// Set global-ish var
-		config.OrigFilename = decryptedFilename
+		log.Debugf("Decrypting and verifying header chunk...")
 
-		// FALL THROUGH
+		header, err := DecryptAndVerifyChunk(noncePlusEncryptedHeaderPlusHash, key, blake)
+		if err != nil {
+			return nil, err
+		}
+
+		msgType, err := ParseDecryptedHeaderIntoValidFields(header)
+		if err != nil {
+			return nil, err
+		}
+
+		config.MsgType = msgType
+
+		log.Debugf("Parsed header; msgType: `%s`", MessageTypeName(msgType))
+
+		//
+		// Decrypt filename chunk if we are decrypting a file (and, thus, there is one)
+		//
+
+		if msgType == MessageTypeFileWithFilename {
+			noncePlusEncryptedChunkPlusHash := make([]byte, EncryptFilenameChunkLength+NonceCryptoBlakeOverhead)
+			n, err := cipherFile.Read(noncePlusEncryptedChunkPlusHash)
+			if err != nil && err != io.EOF {
+				return nil, err
+			}
+
+			if n != cap(noncePlusEncryptedChunkPlusHash) {
+				return nil, fmt.Errorf("Error decrypting filename: Wanted to read"+
+					" %v bytes, read %v bytes instead!",
+					cap(noncePlusEncryptedChunkPlusHash), n)
+			}
+
+			log.Debugf("Decrypting and verifying filename chunk...")
+
+			decryptedFilenameBytes, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash, key, blake)
+			if err != nil {
+				return nil, err
+			}
+
+			// Filename length stored in first byte
+			realLength := int(decryptedFilenameBytes[0])
+
+			// Grab everything after the first byte and before the
+			// trailing random padding
+			decryptedFilename := string(decryptedFilenameBytes[1 : 1+realLength])
+
+			for _, char := range InvalidFilenameChars {
+				if strings.Contains(decryptedFilename, char) {
+					return nil, fmt.Errorf("Decrypted filename `%s` contains"+
+						" invalid character `%s`!", decryptedFilename, char)
+				}
+			}
+
+			// Set global-ish var
+			config.OrigFilename = decryptedFilename
+
+			// FALL THROUGH
+		}
+
+		// Header fully verified :ok_hand:
+		log.Debugf("Header chunk: Successfully decrypted, verified, and parsed")
 	}
 
-	// Header fully verified :ok_hand:
-	log.Debugf("Header chunk: Successfully decrypted, verified, and parsed")
-
+	var n int
 	isLastChunk := false
 	noncePlusEncryptedChunkPlusHash := make([]byte, EncryptChunkLength+DecryptChunkOverhead)
 	for true {
@@ -255,11 +272,13 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 		}
 	}
 
-	// TODO: Consider turning this into an error
 	if !isLastChunk {
-		fmt.Fprintf(os.Stderr, "The file just decrypted may have been truncated! Or it could be a bug in the code that did the encryption; that's all we know.\n")
+		log.Debugf("DecryptReaderToWriter: Returning without getting a last chunk; successfully decrypted everything else, though")
+		config.Blake = blake
+		return config, ErrNotLastChunk
 	}
 
+	log.Debugf("DecryptReaderToWriter: Successfully decrypted and wrote last chunk; total success")
 	return config, nil
 }
 
@@ -274,16 +293,21 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 	log.Debugf("Decrypting and verifying %v-byte nonce + ciphertext + hash",
 		len(noncePlusEncryptedChunkPlusHash))
 
+	// Layout: `[ 24 bytes: nonce || 1 + N + 16 bytes: 1 isLastChunk byte, N encrypted bytes, 16 overhead bytes || 64 bytes: Blake2b hash ]`
+
 	nonce, err := ConvertNonce(noncePlusEncryptedChunkPlusHash[:NonceLength])
 	if err != nil {
 		return nil, err
 	}
 	cipher := noncePlusEncryptedChunkPlusHash[NonceLength : len(noncePlusEncryptedChunkPlusHash)-Blake2bHashLength]
-	gotBlakeHash := noncePlusEncryptedChunkPlusHash[len(noncePlusEncryptedChunkPlusHash)-Blake2bHashLength:]
 
+	log.Debugf("DecryptAndVerifyChunk: Decrypting %v bytes from %v-byte chunk...",
+		len(cipher), len(noncePlusEncryptedChunkPlusHash))
+
+	// Decrypt
 	plain, ok := secretbox.Open(nil, cipher, nonce, key)
 	if !ok {
-		return nil, fmt.Errorf("Error decrypting %v-byte secretbox message: %w",
+		return nil, fmt.Errorf("DecryptAndVerifyChunk: Error decrypting %v-byte secretbox message: %w",
 			len(cipher), ErrChunkDecryptionFailed)
 	}
 
@@ -294,6 +318,7 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 
 	blakeSum := blake.Sum(nil)
 
+	gotBlakeHash := noncePlusEncryptedChunkPlusHash[len(noncePlusEncryptedChunkPlusHash)-Blake2bHashLength:]
 	if subtle.ConstantTimeCompare(gotBlakeHash, blakeSum) == 0 {
 		return nil, ErrInvalidChunkHash
 	}

@@ -123,6 +123,7 @@ var (
 type EncryptionConfig struct {
 	OrigFilename string
 	MsgType      uint16
+	Blake        hash.Hash
 }
 
 func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
@@ -210,6 +211,8 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 		return err
 	}
 
+	log.Debugf("EncryptReaderToWriter: header created, encrypted, and hashed successfully (though not yet written)")
+
 	// Write this below, for efficiency's sake, and to not reveal much
 	// about the structure of the files we're sending
 	firstChunkEnc := noncePlusEncryptedHeaderPlusHash
@@ -256,6 +259,9 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 			noncePlusEncryptedChunkPlusHash = append(firstChunkEnc,
 				noncePlusEncryptedChunkPlusHash...)
 		}
+
+		log.Debugf("Writing chunk; first == %v, length == %v",
+			!isFirstChunkWritten, len(noncePlusEncryptedChunkPlusHash))
 
 		_, err = cipherFile.Write(noncePlusEncryptedChunkPlusHash)
 		if err != nil {
