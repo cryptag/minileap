@@ -73,6 +73,8 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 		// FALL THROUGH
 	}
 
+	// TODO: Run `os.Remove(plainFilename)` on error
+
 	cipherFile, err := os.Open(cipherFilename)
 	if err != nil {
 		return config, err
@@ -136,36 +138,32 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 // of an error in order to relay potentially-relevant information to
 // the caller. If blake is nil this means we are decrypting the first
 // chunk in a miniLeap file, and a new Blake2b hasher will be created
-// and used.
+// and used. Callers who receive err == ErrNotLastChunk should use
+// config.Blake do call this function again to decrypt subsequent
+// chunks until err == nil is returned.
 func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer, blake hash.Hash) (config *EncryptionConfig, err error) {
-	// TODO: Run `os.Remove(plainFilename)` on error
-
 	if key == nil || *key == empty32ByteArray {
 		return nil, ErrInvalidKey
 	}
 
-	isFirstChunk := (blake == nil)
+	config = &EncryptionConfig{}
 
-	if isFirstChunk {
+	// If we are currently decrypting the first chunk...
+	if blake == nil {
 		newBlake, err := blake2b.New512(nil)
 		if err != nil {
 			return nil, err
 		}
-
+		// Set global-ish var
 		blake = newBlake
 
-		// FALL THROUGH
-	}
+		//
+		// Header: Decrypt it, verify its hash, set `config.MsgType`
+		// and, if we're decrypting a MessageTypeFileWithFilename,
+		// also set `config.OrigFilename`
+		//
 
-	//
-	// Header: Decrypt it, verify its hash
-	//
-
-	config = &EncryptionConfig{}
-
-	if isFirstChunk {
 		noncePlusEncryptedHeaderPlusHash := make([]byte, DecryptHeaderLength)
-
 		n, err := cipherFile.Read(noncePlusEncryptedHeaderPlusHash)
 		if err != nil {
 			return nil, err
@@ -188,6 +186,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 			return nil, err
 		}
 
+		// Set global-ish var
 		config.MsgType = msgType
 
 		log.Debugf("Parsed header; msgType: `%s`", MessageTypeName(msgType))
@@ -237,8 +236,13 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 		}
 
 		// Header fully verified :ok_hand:
-		log.Debugf("Header chunk: Successfully decrypted, verified, and parsed")
+		log.Debugf("Header chunk: Successfully decrypted, verified, and parsed %s",
+			MessageTypeName(msgType))
 	}
+
+	//
+	// Decrypt and verify data chunks
+	//
 
 	var n int
 	isLastChunk := false
