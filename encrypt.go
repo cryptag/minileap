@@ -72,6 +72,8 @@ const (
 	MessageTypeFileWithFilenameAndPath = uint16(6)
 )
 
+var empty32ByteArray = [32]byte{}
+
 func MessageTypeName(msgType uint16) string {
 	switch msgType {
 	case MessageTypeInvalid:
@@ -122,7 +124,7 @@ type EncryptionConfig struct {
 }
 
 func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
-	if key == nil || *key == [32]byte{} {
+	if key == nil || *key == empty32ByteArray {
 		return "", ErrInvalidKey
 	}
 
@@ -179,7 +181,7 @@ func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrit
 }
 
 func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, cipherFile io.Writer, encConfig *EncryptionConfig) error {
-	if key == nil || *key == [32]byte{} {
+	if key == nil || *key == empty32ByteArray {
 		return ErrInvalidKey
 	}
 
@@ -377,6 +379,9 @@ func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]b
 	isLastChunkBytePlusPlainLen := len(isLastChunkBytePlusPlain)
 	if isLastChunkBytePlusPlainLen == 0 {
 		return nil, fmt.Errorf("Cannot encrypt empty chunk")
+	}
+	if key == nil || *key == empty32ByteArray {
+		return nil, ErrInvalidKey
 	}
 
 	nonce, err := RandomNonce()

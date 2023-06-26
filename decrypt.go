@@ -24,7 +24,7 @@ const (
 // message will be written to stdout, discarding the filename if the
 // underlying message type is MessageTypeFileWithFilename.
 func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwrite bool) (*EncryptionConfig, error) {
-	if key == nil || *key == [32]byte{} {
+	if key == nil || *key == empty32ByteArray {
 		return nil, ErrInvalidKey
 	}
 
@@ -133,7 +133,7 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer) (config *EncryptionConfig, err error) {
 	// TODO: Run `os.Remove(plainFilename)` on error
 
-	if key == nil || *key == [32]byte{} {
+	if key == nil || *key == empty32ByteArray {
 		return nil, ErrInvalidKey
 	}
 
@@ -266,6 +266,9 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
 	if len(noncePlusEncryptedChunkPlusHash) <= NonceCryptoBlakeOverhead {
 		return nil, ErrInvalidChunkLength
+	}
+	if key == nil || *key == empty32ByteArray {
+		return nil, ErrInvalidKey
 	}
 
 	log.Debugf("Decrypting and verifying %v-byte nonce + ciphertext + hash",
