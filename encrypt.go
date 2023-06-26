@@ -190,7 +190,7 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 			ErrInvalidEncryptConfig)
 	}
 
-	blake, err := blake2b.New512((*key)[:])
+	blake, err := blake2b.New512(nil)
 	if err != nil {
 		return err
 	}
@@ -397,6 +397,7 @@ func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]b
 	cipher := make([]byte, 0, cipherCapacity)
 
 	// Note: `blake.Write(...)` never returns error, as per `hash.Hash` spec
+	blake.Write((*key)[:])
 
 	cipher = append(cipher, nonceSlice...)
 	cipher = secretbox.Seal(cipher, isLastChunkBytePlusPlain, nonce, key)
@@ -404,7 +405,7 @@ func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]b
 
 	blakeSum := blake.Sum(nil)
 	cipher = append(cipher, blakeSum...)
-	blake.Write(blakeSum) // Roll baby roll
+	blake.Write(blakeSum) // It's almost like... a chain of blocks...
 
 	if len(cipher) != cap(cipher) {
 		return nil, fmt.Errorf("EncryptAndHashChunk: ciphertext is of length "+

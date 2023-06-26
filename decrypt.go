@@ -138,7 +138,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 	}
 
 	// Hashers ftw
-	blake, err := blake2b.New512((*key)[:])
+	blake, err := blake2b.New512(nil)
 	if err != nil {
 		return nil, err
 	}
@@ -287,6 +287,8 @@ func DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash []byte, key *[ValidKe
 			len(cipher), ErrChunkDecryptionFailed)
 	}
 
+	// Note: `blake.Write(...)` never returns error, as per `hash.Hash` spec
+	blake.Write((*key)[:])
 	blake.Write(noncePlusEncryptedChunkPlusHash[:NonceLength])
 	blake.Write(cipher)
 

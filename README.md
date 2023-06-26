@@ -75,7 +75,7 @@ followed by 1 or more data chunks that each encrypt N bytes, where N
 is equal to the header-provided Chunk Size for every chunk except
 (perhaps) the last one, which may be of size less than N:
 
-`[ N+105-byte chunk: 24-byte nonce + 1-byte last chunk indicator + N-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b rolling hash ]`
+`[ N+105-byte chunk: 24-byte nonce + 1-byte last chunk indicator + N-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b hash ]`
 
 The last chunk indicator byte should be 0 if the chunk is not the last
 byte, and a 1 if it is.
@@ -177,7 +177,7 @@ In general, the overhead of encrypting data with miniLeap is 109 bytes
 (for the header 24-byte header + 5-byte body + 64-byte Blake2b hash;
 see below) + 105 bytes/chunk (for each chunk's 24-byte nonce + 1 byte
 last chunk indicator byte prepended to the body + 16-byte overhead from
-libsodium's SecretBox encryption + 64-byte Blake2b rolling hash).
+libsodium's SecretBox encryption + 64-byte Blake2b hash).
 
 If you're encrypting 1,000,000 bytes, all in one chunk, the resulting
 ciphertext is thus 1,000,214 bytes (0.0214% overhead).
@@ -195,18 +195,22 @@ languages):
 
 header: `[ 24-byte nonce || 5-byte body + 16-byte authentication tag || 64-byte Blake2b MAC ]`
 
-chunk 1: `[ 24-byte nonce || 1-byte last chunk indicator + 1-byte body + 16-byte authentication tag || 64-byte rolling Blake2b MAC ]`
+chunk 1: `[ 24-byte nonce || 1-byte last chunk indicator + 1-byte body + 16-byte authentication tag || 64-byte Blake2b hash ]`
 
 The end result of all this encrypting and hashing is a file of this structure:
 
-`[ header nonce || header ciphertext || Blake2b(key || header nonce || header ciphertext) || chunk 1 nonce || chunk 1 ciphertext || Blake2b(the header's Blake2b hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(chunk N-1's Blake2b hash || chunk N's nonce || chunk N's ciphertext) ]`.
+`[ header nonce || header ciphertext || Blake2b(key || header nonce || header ciphertext) || chunk 1 nonce || chunk 1 ciphertext || Blake2b(key || the header's Blake2b hash || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext || Blake2b(key || chunk N-1's Blake2b hash || chunk N's nonce || chunk N's ciphertext) ]`.
 
 
 #### Why add a Blake2b hash to the end of each chunk?  Isn't that redundant since each chunk is encrypted using libsodium's SecretBox?
 
-The rolling Blake2b hash at the end of each chunk accomplishes two things at once:
+The Blake2b hash at the end of each chunk accomplishes two things at once:
 
-1. Cryptographically-connected chunks, thanks to the rolling!  The chunk-trailing hash isn't just a hash of that chunk's nonce and ciphertext -- indeed, this would be redundant, since we're using authenticated cryptography for each individual chunk -- but rather chunk N's Blake2b hash is calculated as such: `Blake2b(key || header nonce || header ciphertext || Blake2b(header nonce || header ciphertext) || chunk 1 nonce || chunk 1 ciphertext || Blake2b(chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext)`.
+1. Cryptographically-connected chunks, thanks to the "blockchain"-like hashing!  The chunk-trailing hash isn't just a hash of that chunk's nonce and ciphertext -- indeed, this would be redundant, since we're using authenticated cryptography for each individual chunk -- but rather chunk N's Blake2b hash is calculated as such: `Blake2b(key || header nonce || header ciphertext || Blake2b(key || header nonce || header ciphertext) || chunk 1 nonce || chunk 1 ciphertext || Blake2b(key || chunk 1 nonce || chunk 1 ciphertext) || ... || chunk N's nonce || chunk N's ciphertext)`.
+
+(Note that the hash of chunk N-1 is used as a starting point before
+hashing the nonce and ciphertext of chunk N to determine chunk N's
+trailing hash.)
 
 2. Making it so we can detect a tampered-with message (e.g., the attacker deleted the last chunk but kept everything else the same) _early_, without needing to either decrypt or hash all the chunks first.  This enables safe, efficient, truly streaming decryption.
 
@@ -215,7 +219,26 @@ each chunk, though this prevents a chunk from being tampered with
 without detection even before a decryptor has checked its trailing
 Blake2b hash -- a nice little bonus.  Plus, NaCl/libsodium is widely
 available in various programming languages, making it an excellent
-choice to place at the foundation of miniLeap.
+choice to place at the foundation of miniLeap, as one of my design
+goals is to make it easy to implement miniLeap given an implementation
+of libsodium in your favorite programming language.  This way the
+world can more feasibly have more miniLeap-based applications that
+protect more users.
+
+
+#### Why hash the key when encrypting each chunk and not just once at the beginning?  Isn't that redundant since whoever just has the ciphertext can't calculate the hashes anyway?
+
+I want to be able to store miniLeap files in hostile territory without
+the storage hosting provider (e.g., Dropbox) being able to feasibly
+write any kind of scanner to find all such files.  Without this
+per-chunk key hashing -- which was the original design before the
+following flaw was discovered -- the provider would be able to find
+all miniLeap files they're storing by scanning for files such that
+`blake2b(hash at end of header chunk || data chunk 1 except its trailing hash) == (data chunk 1's hash)`.
+This would be feasible due to the definition of the miniLeap file
+type, in particular its fixed header size and chunk size of 100,000
+bytes.  But miniLeap does not have this flaw, all thanks to the
+per-chunk hashing.
 
 
 #### Why is the chunk size 100,000 bytes?
