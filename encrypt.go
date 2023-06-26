@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/cryptag/go-minilock/taber"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
@@ -105,6 +106,7 @@ var (
 	ErrInvalidFinalHash      = fmt.Errorf("Invalid final hash")
 	ErrInvalidEncryptConfig  = fmt.Errorf("Invalid encryption configuration options")
 	ErrInvalidFilenameLength = fmt.Errorf("Invalid filename length")
+	ErrInvalidAccountID      = fmt.Errorf("Invalid account ID; must be valid base58 and of length 33 after being decoded")
 
 	// Don't let an attacker who's sending me a file control which
 	// directory it ends up in
@@ -535,6 +537,35 @@ func ConvertKey(key []byte) (goodKey *[ValidKeyLength]byte, err error) {
 	}
 
 	return &good, nil
+}
+
+func DecodeAccountID(minilockID string) ([]byte, error) {
+	decodedMinilockID := base58.Decode(minilockID)
+	if len(decodedMinilockID) == 0 {
+		return nil, ErrInvalidAccountID
+	}
+	if len(decodedMinilockID) != 33 { // Note: Can support base 58-encoded 32-byte keys here
+		return nil, fmt.Errorf("Decoded account ID (aka miniLock ID)'s length is %v, should be 33", len(decodedMinilockID))
+	}
+
+	// TODO: Ensure that blake2s(decodedMinilockID[:32])[0] == decodedMinilockID[32]
+
+	return decodedMinilockID[:32], nil
+}
+
+func ConvertAccountID(minilockID string) (*[ValidKeyLength]byte, error) {
+	decodedMinilockID, err := DecodeAccountID(minilockID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert from length-32 []byte to *[32]byte needed to do useful shit
+	pubkey32, err := ConvertKey(decodedMinilockID)
+	if err != nil {
+		return nil, err
+	}
+
+	return pubkey32, nil
 }
 
 func MustWipeKeys(keyPair *taber.Keys, keyPairPrivate32 *[32]byte) {
