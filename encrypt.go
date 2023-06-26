@@ -430,13 +430,10 @@ func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]b
 // even, and `isLastChunk == true` results in the returned byte being
 // odd.)
 func IsLastChunkBoolToByte(isLastChunk bool) (byte, error) {
-	b := make([]byte, 1)
-	_, err := rand.Read(b)
+	randByte, err := RandByte()
 	if err != nil {
 		return 0, err
 	}
-
-	randByte := b[0]
 
 	if isLastChunk {
 		// Ensure odd
@@ -445,6 +442,15 @@ func IsLastChunkBoolToByte(isLastChunk bool) (byte, error) {
 
 	// Ensure even
 	return randByte & 0xFE, nil
+}
+
+func RandByte() (byte, error) {
+	b := make([]byte, 1)
+	_, err := rand.Read(b)
+	if err != nil {
+		return 0, err
+	}
+	return b[0], nil
 }
 
 // From https://www.tutorialspoint.com/how-to-check-if-a-file-exists-in-golang
