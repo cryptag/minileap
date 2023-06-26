@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/btcsuite/btcutil/base58"
+	"github.com/cryptag/base58"
 	"github.com/cryptag/go-minilock/taber"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"

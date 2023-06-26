@@ -3,7 +3,7 @@ module github.com/cryptag/minileap
 go 1.20
 
 require (
-	github.com/btcsuite/btcutil v1.0.2
+	github.com/cryptag/base58 v0.0.0-20230626074437-96898467fe7a
 	github.com/cryptag/go-minilock v0.0.0-20230307201426-f138c5839651
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.7.0
