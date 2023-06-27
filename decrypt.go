@@ -81,11 +81,11 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 	}
 	defer cipherFile.Close()
 
-	// TODO: Consider changing this function signature to return
-	// `config` instead of `plainFilename`
+	// TODO: Consider changing this very function's signature to
+	// return `config` instead of `plainFilename`
 
 	// Set global-ish var `config`
-	config, err = DecryptReaderToWriter(cipherFile, key, plainFile, nil)
+	config, err = DecryptReaderToWriter(cipherFile, key, &EncryptionConfig{PlainFile: plainFile})
 	if err != nil {
 		return config, err
 	}
@@ -144,7 +144,7 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 // a new file with that name will be created with os.Create() and the
 // resulting *os.File will be stored in the `plainFile` variable and
 // have the decrypted data written to it.
-func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Writer, encConfig *EncryptionConfig) (config *EncryptionConfig, err error) {
+func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *EncryptionConfig) (config *EncryptionConfig, err error) {
 	if key == nil || *key == empty32ByteArray {
 		return nil, ErrInvalidKey
 	}
@@ -153,6 +153,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 		encConfig = &EncryptionConfig{}
 	}
 	blake := encConfig.Blake
+	plainFile := encConfig.PlainFile
 
 	config = &EncryptionConfig{}
 
@@ -311,6 +312,8 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, plainFile io.Wri
 					// FALL THROUGH
 				}
 			}
+
+			config.PlainFile = plainFile
 
 			// FALL THROUGH
 		}
