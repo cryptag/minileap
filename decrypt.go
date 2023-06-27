@@ -386,9 +386,14 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *Encry
 	}
 
 	// Close file opened to store decrypted contents
-	if plainFile, ok := plainFile.(*os.File); ok && plainFile != os.Stdout {
-		// TODO: Handle error(?)
-		_ = plainFile.Close()
+	if plainFile, ok := plainFile.(*os.File); ok {
+		if plainFile == os.Stdout {
+			// Trailing newline
+			os.Stdout.Write([]byte("\n"))
+		} else {
+			// TODO: Handle error(?)
+			_ = plainFile.Close()
+		}
 	}
 
 	log.Debugf("DecryptReaderToWriter: Successfully decrypted and wrote last chunk; total success")
