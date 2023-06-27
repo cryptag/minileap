@@ -121,9 +121,21 @@ var (
 )
 
 type EncryptionConfig struct {
-	OrigFilename string
-	MsgType      uint16
-	Blake        hash.Hash
+	OrigFilename  string
+	MsgType       uint16
+	Blake         hash.Hash
+	PlainFile     io.Writer
+	SavedLocation string
+}
+
+func (config *EncryptionConfig) SavedAs() string {
+	if config == nil {
+		return "(*EncryptionConfig is nil)"
+	}
+	if config.SavedLocation != "" {
+		return config.SavedLocation
+	}
+	return config.OrigFilename
 }
 
 func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrite bool) (cipherFilename string, err error) {
