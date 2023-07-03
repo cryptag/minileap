@@ -1,23 +1,96 @@
 // Steve Phillips / elimisteve
 // 2017.01.13 / 2023.05.20
 
-// Copied from github.com/cryptag/cryptag/share/keys.go
+// Originally copied from github.com/cryptag/cryptag/share/keys.go
 package minileap
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha512"
 	"fmt"
 	"math/big"
 
+	"github.com/cathalgarvey/base58"
 	"github.com/cryptag/go-minilock/taber"
 )
 
-// NewKeyPair generates an "email" from the given passphrase, then
-// uses that email/passphrase pair to generate a new keypair.
-func NewKeyPair(passphrase string) (keypair *taber.Keys, err error) {
-	email := EmailFromPassphrase(passphrase)
+// OldKeyPair generates an "email" from the given passphrase if
+// `email` is empty, then uses that email/passphrase pair to generate
+// a new keypair.
+//
+// Obsolete; Ed25519 > Curve25519 as the user's public identity.
+//
+// Use NewIdentity() instead.
+func OldKeyPair(email, passphrase string) (keypair *taber.Keys, err error) {
+	if email == "" {
+		email = EmailFromPassphrase(passphrase)
+	}
+	// Returns miniLock-compatible keypair
 	return taber.FromEmailAndPassphrase(email, passphrase)
+}
+
+type Identity struct {
+	SignFullPrivate []byte
+	SignPublic      []byte
+
+	Private []byte
+	Public  []byte
+}
+
+func (id *Identity) EncodeID() (string, error) {
+	if len(id.SignPublic) != ValidKeyLength {
+		return "", ErrInvalidKey
+	}
+
+	return string(base58.StdEncoding.Encode(id.SignPublic)), nil
+}
+
+func (id *Identity) Wipe() {
+	// Wipe both halves
+	copy(id.SignFullPrivate[0:32], empty32ByteArray[:])
+	copy(id.SignFullPrivate[32:64], empty32ByteArray[:])
+
+	copy(id.Private, empty32ByteArray[:])
+}
+
+// NewIdentity generates an "email" from the given passphrase, then
+// uses that email/passphrase pair to generate a new keypair.... which
+// is then used to seed an Ed25519 keypair, from which a Curve25519
+// keypair is derived.
+func NewIdentity(email, passphrase string) (*Identity, error) {
+	minilockPair, err := OldKeyPair(email, passphrase)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use miniLock private key to seed new signing keypair
+
+	// signFullPrivKey consists of the 32-byte private key
+	// _concatenated with_ the 32-byte public key, for Efficiency :tm:
+	signFullPrivKey := ed25519.NewKeyFromSeed(minilockPair.Private)
+	curvePriv, err := PrivateEd25519ToCurve25519(signFullPrivKey[:32])
+	if err != nil {
+		return nil, err
+	}
+
+	// 'Tis correct: https://cs.opensource.google/go/go/+/refs/tags/go1.20.5:src/crypto/ed25519/ed25519.go;l=152
+	signPubKey := signFullPrivKey[32:]
+
+	curvePub, err := PublicEd25519ToCurve25519(signPubKey)
+	if err != nil {
+		return nil, err
+	}
+
+	ident := &Identity{
+		SignFullPrivate: signFullPrivKey, // All the other keys are derived from this
+		SignPublic:      signPubKey,      // AccountID == string(base58.StdEncoding.Encode(SignPublic))
+
+		Private: curvePriv,
+		Public:  curvePub,
+	}
+
+	return ident, nil
 }
 
 // EmailFromPassphrase generates an "email" suitable for combining

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cryptag/base58"
+	"github.com/cathalgarvey/base58"
 	"github.com/cryptag/go-minilock/taber"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
@@ -563,33 +563,30 @@ func ConvertKey(key []byte) (goodKey *[ValidKeyLength]byte, err error) {
 	return &good, nil
 }
 
-func DecodeAccountID(minilockID string) ([]byte, error) {
-	decodedMinilockID := base58.Decode(minilockID)
-	if len(decodedMinilockID) == 0 {
-		return nil, ErrInvalidAccountID
+func Base58DecodeAccountID(accountID string) ([]byte, error) {
+	signPubKey, err := base58.StdEncoding.Decode([]byte(accountID))
+	if err != nil {
+		return nil, err
 	}
-	if len(decodedMinilockID) != 33 { // Note: Can support base 58-encoded 32-byte keys here
-		return nil, fmt.Errorf("Decoded account ID (aka miniLock ID)'s length is %v, should be 33", len(decodedMinilockID))
+	if len(signPubKey) != 32 {
+		return nil, fmt.Errorf("Decoded account ID's length is %v, should be 32",
+			len(signPubKey))
 	}
-
-	// TODO: Ensure that blake2s(decodedMinilockID[:32])[0] == decodedMinilockID[32]
-
-	return decodedMinilockID[:32], nil
+	return signPubKey, nil
 }
 
-func ConvertAccountID(minilockID string) (*[ValidKeyLength]byte, error) {
-	decodedMinilockID, err := DecodeAccountID(minilockID)
+func AccountIDToCurve25519(accountID string) ([]byte, error) {
+	signPubKey, err := Base58DecodeAccountID(accountID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert from length-32 []byte to *[32]byte needed to do useful shit
-	pubkey32, err := ConvertKey(decodedMinilockID)
+	curvePub, err := PublicEd25519ToCurve25519(signPubKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return pubkey32, nil
+	return curvePub, nil
 }
 
 func MustWipeKeys(keyPair *taber.Keys, keyPairPrivate32 *[32]byte) {

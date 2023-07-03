@@ -12,7 +12,7 @@ func ECDH(keyPairPrivate []byte, theirAccountID string) (*[ValidKeyLength]byte, 
 
 	curve := ecdh.X25519()
 
-	theirPubkey, err := DecodeAccountID(theirAccountID)
+	theirPubkey, err := AccountIDToCurve25519(theirAccountID)
 	if err != nil {
 		return nil, err
 	}

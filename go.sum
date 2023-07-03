@@ -1,9 +1,9 @@
+filippo.io/edwards25519 v1.0.0 h1:0wAIcmJUqRdI8IJ/3eGi5/HwXZWPujYXXlkrQogz0Ek=
+filippo.io/edwards25519 v1.0.0/go.mod h1:N1IkdkCkiLB6tki+MYJoSx2JTY9NUlxZE7eHn5EwJns=
 github.com/cathalgarvey/base58 v0.0.0-20150930172411-5e83fd6f66e3 h1:UiCAzJ/7RzEVGU8SxQcrgtkbOUCDYfGYHAZHYvWbW3o=
 github.com/cathalgarvey/base58 v0.0.0-20150930172411-5e83fd6f66e3/go.mod h1:JHU0bsaIIAwKdJ84j3JNHDGsXehsQIS6EySrtGIZ4fs=
 github.com/cmars/basen v0.0.0-20150613233007-fe3947df716e h1:0XBUw73chJ1VYSsfvcPvVT7auykAJce9FpRr10L6Qhw=
 github.com/cpuguy83/go-md2man/v2 v2.0.2/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
-github.com/cryptag/base58 v0.0.0-20230626074437-96898467fe7a h1:26M0A2FIXntjI85ne/Bn3Y+6p4moZ8sliR+H4Q/cgN4=
-github.com/cryptag/base58 v0.0.0-20230626074437-96898467fe7a/go.mod h1:6X3sitkFUaNVq+iHCW7qfXsU2+3fWrPEAws8IhroPZE=
 github.com/cryptag/go-minilock v0.0.0-20230307201426-f138c5839651 h1:rOxjZMKV4wDUe1DHinSJ8oLgI7F3W8f9uI4T17KnD48=
 github.com/cryptag/go-minilock v0.0.0-20230307201426-f138c5839651/go.mod h1:mP3jjk8yMP5bPGrEG/jTgg3e1A3671eIPo35BVjfO+M=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

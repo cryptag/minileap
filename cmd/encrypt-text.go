@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/cryptag/go-minilock/taber"
 	"github.com/cryptag/minileap"
 	"github.com/spf13/cobra"
 )
@@ -52,22 +53,25 @@ var encryptTextCmd = &cobra.Command{
 		// Derive keypair from user-specified email and password
 
 		requirePassphrase := false
-		keyPair := minileap.MustDeriveKeypairFromUserInput(requirePassphrase, options.EncryptText_Email)
+		ident := minileap.MustDeriveIdentityFromUserInput(
+			requirePassphrase,
+			options.EncryptText_Email,
+		)
+		defer ident.Wipe()
 
-		keyPairPrivate32, err := minileap.ConvertKey(keyPair.Private)
+		keyPairPrivate32, err := minileap.ConvertKey(ident.Private)
+		if err != nil {
+			exit(err)
+		}
+		defer taber.WipeKeyArray(keyPairPrivate32)
+
+		accountID, err := ident.EncodeID()
 		if err != nil {
 			exit(err)
 		}
 
-		defer minileap.MustWipeKeys(keyPair, keyPairPrivate32)
-
-		mID, err := keyPair.EncodeID()
-		if err != nil {
-			exit(err)
-		}
-
-		fmt.Fprintf(os.Stderr, "Using miniLock ID %s to derive symmetric key"+
-			" to encrypt text `%s` ...\n", mID, text)
+		fmt.Fprintf(os.Stderr, "Using account ID %s to derive symmetric key"+
+			" to encrypt text `%s` ...\n", accountID, text)
 
 		exists, err := minileap.FileExists(cipherFilename)
 		if err != nil {

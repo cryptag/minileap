@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cryptag/go-minilock/taber"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/nacl/secretbox"
@@ -470,7 +469,7 @@ func IsLastChunkByte(isLastChunk byte) bool {
 	return isLastChunk&1 == 1
 }
 
-func MustDeriveKeypairFromUserInput(requirePassphrase bool, email string) *taber.Keys {
+func MustDeriveIdentityFromUserInput(requirePassphrase bool, email string) *Identity {
 	if requirePassphrase {
 		fmt.Fprintf(os.Stderr, "Passphrase: ")
 	} else {
@@ -496,10 +495,10 @@ func MustDeriveKeypairFromUserInput(requirePassphrase bool, email string) *taber
 		email = EmailFromPassphrase(passphrase)
 	}
 
-	keypair, err := taber.FromEmailAndPassphrase(email, passphrase)
+	ident, err := NewIdentity(email, passphrase)
 	if err != nil {
 		exit(err)
 	}
 
-	return keypair
+	return ident
 }
