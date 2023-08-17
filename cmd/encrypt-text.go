@@ -88,7 +88,6 @@ var encryptTextCmd = &cobra.Command{
 		if err != nil {
 			exit(err)
 		}
-
 		defer cipherFile.Close()
 
 		err = minileap.EncryptReaderToWriter(

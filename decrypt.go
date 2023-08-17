@@ -358,6 +358,10 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *Encry
 
 		isLastPlusDecryptedChunk, err := DecryptAndVerifyChunk(noncePlusEncryptedChunkPlusHash[:n], key, blake)
 		if err != nil {
+			// TODO: Set `config.Leftovers = noncePlusEncryptedChunkPlusHash[:n]`
+			// and `config.Blake = blake` as long as `err != ErrInvalidChunkHash`?
+			// And return special error indicating a partial chunk decryption
+			// failure?
 			return config, err
 		}
 

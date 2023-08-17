@@ -60,10 +60,10 @@ var decryptFileCmd = &cobra.Command{
 			exit(err)
 		}
 
-		if config.OrigFilename == "" {
+		if config.SavedAs() == "" {
 			// Just decrypted a file of message type non-file and
 			// wrote it to stdout
-			fmt.Fprintf(os.Stderr, "File with underlying message type %v successfully decrypted",
+			fmt.Fprintf(os.Stderr, "File with underlying message type %v successfully decrypted\n",
 				minileap.MessageTypeName(config.MsgType))
 		} else if options.DecryptFile_DestinationDirectory != "-" {
 			// Just decrypted a file of MessageTypeFileWithFilename
