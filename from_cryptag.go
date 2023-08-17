@@ -1401,7 +1401,7 @@ var wordlist = []string{
 	"Yesterday",
 	"Yiddish",
 	"Yield",
-	"Yo-yo",
+	"Yoyo", // Was originally "Yo-yo"
 	"Yodel",
 	"Yogurt",
 	"Yuppie",
