@@ -69,13 +69,13 @@ Total possible valid miniLeap message types: 2**16 - 1 == 65,535
 Once you have encrypted a piece of data (e.g., text or a file), the
 resulting miniLeap message will have the following structure:
 
-`[ 109-byte header: 24-byte nonce + 5-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b hash ]`
+`[ 109-byte header: 24-byte nonce + 5-byte encrypted body + 16-byte libsodium secretbox overhead + 64-byte Blake2b hash ]`
 
 followed by 1 or more data chunks that each encrypt N bytes, where N
 is equal to the header-provided Chunk Size for every chunk except
 (perhaps) the last one, which may be of size less than N:
 
-`[ N+105-byte chunk: 24-byte nonce + 1-byte last chunk indicator + N-byte encrypted body + 16-byte libsodium overhead + 64-byte Blake2b hash ]`
+`[ N+105-byte chunk: 24-byte nonce + 1-byte last chunk indicator + N-byte encrypted body + 16-byte libsodium secretbox overhead + 64-byte Blake2b hash ]`
 
 The last chunk indicator byte should be 0 if the chunk is not the last
 byte, and a 1 if it is.
@@ -85,7 +85,7 @@ byte, and a 1 if it is.
 
 0: Invalid type; sanity check
 
-1: UTF-8 encoded text (e.g., chat message)
+1: UTF-8 encoded text (e.g., chat message); max length: 10,000 bytes; to send larger, send a .txt file (message type #5) or Big Text (message type #9)
 
 2: URL, including the protocol (e.g., https://leapchat.org, not just leapchat.org)
 
@@ -93,16 +93,90 @@ byte, and a 1 if it is.
 
 4: Passphrase (first and only non-header chunk is 256 bytes: 1 uint8 to tell us the passphrase length L (must be at least 75), then L bytes of passphrase, then `255 - L` random bytes of padding)
 
-5: File (first non-header chunk is 256 bytes before encryption: 1 uint8 to tell us the filename length L, then L bytes, then `255 - L` bytes of random byte padding; remaining chunks use the scheme described above, namely 1+ chunks of nonce-prefixed ciphertext)
+5: File (first non-header chunk is 256 bytes before encryption: 1 uint8 to tell us the filename length L, then L bytes (the filename), then `255 - L` bytes of _random_ byte padding; remaining chunks use the scheme described above, namely 1+ chunks of nonce-prefixed ciphertext)
 
 6: File with file path, not just filename + body (details TBD)
 
-7 through 65,535: Reserved for future assignment. Please submit a PR to propose a new message type.
+7: .minileap message (yes, nested inside the outer .minileap message!)
+
+8: Ed25519-signed UTF-8 encoded text (details TBD; will probably include putting a detached signature at the beginning (or end?); especially useful just after sending or receiving a miniLeap message of type 4 -- a passphrase we use to derive a keypair, log in with, then send and receive chat messages with using this shared _group_ account that all chat members are logged in as)
+
+9: Big Text: UTF-8 encoded text > 10,000 bytes long (if shorter, use message type #1)
+
+10: WebAssembly module (first non-header chunk: 1,000-byte manifest (pad the unused remainder with random data); second non-header chunk: Wasm module)
+
+11: Initiate new forward-secure chat conversation by creating a new keypair and performing ECDH against it using the provided 33-byte unencoded/"base 256"-encoded miniLock ID.  The recipient of this message of Message Type #11 should reply with a miniLeap message of Message Type #12 and the following internal structure: `[ 33-byte unencoded miniLock ID of the new keypair ]`.  Each side starts with the same key, ratchets its own encryption key forward with `new_key := blake2b(prev_key)[0:32]`, and ratchets the same initially-identical decryption key forward with the same procedure each time it receives a new message.  This way an attacker 
+
+12: 33-byte unencoded/"base 256"-encoded miniLock ID
+
+13: End the current forward-secure chat conversation (message body: 33-byte unencoded miniLock ID of either participant's ephemeral keypair that this convo started with)
+
+14: A 32-byte symmetric key.
+
+15: Initiate real-time mode.  Use the provided (just-randomly-generated) symmetric key (see Message Type #14's) to.  Details TBD.  (Each message's plaintext should probably begin with the hash of the one-time-use symmetric key needed to decrypt that message, in case any messages get dropped.)
+
+16: File share.  Includes a 32-byte symmetric key followed by a filename or folder (details TBD).
+
+17: Ed25519 signing key.  Includes a passphrase (same structure as Message Type #4) to be used to derive a Curve25519 keypair in the usual way (through scrypt w/miniLock's parameters) _then used to seed an Ed25519 keypair_.
+
+18: Shamir Secret Sharing share.
+
+19: Decoy data/cover traffic.  1,000 encrypted bytes.  Total size of ciphertext, after 106-byte header + 105-byte first data chunk overhead (including 1-byte Last Chunk indicator): 1,211 bytes.
+
+20: Accept messages from these other accounts of mine.  Once decrypted, should be a multiple of 32, since the account IDs should be in binary, _not_ base58-encoded.
+
+21: Padded URL: 2 bytes (Big Endian) indicating the length N of the following URL, then N bytes of said URL, then 4,000 - N bytes of random padding.
+
+22: Padded UTF-8 text: 2 bytes (Big Endian) at the beginning of each chunk indicating how many bytes N of padding there are at the end of the current chunk.  Note that N == 0 is valid, namely when the current chunk is completely filled with content (up to the 65,535 bytes).  This is useful for when you are sending a multi-chunk blob and you want all the chunks to be exactly the same size, including the last one.
+
+23: Disappearing message: 3 bytes (Big Endian) at the beginning of the message indicating the number of seconds the message should stick around...  Actually, how about just including a timestamp (in Unix time?) for the moment the message should be deleted?
+
+24 through 65,535: Reserved for future assignment. Please submit a PR to propose a new message type.
 
 
 #### Future Enhancements Under Consideration
 
 None!  K.I.S.S.
+
+1. Should I include chunk number at the beginning of each chunk?  Then if you miss a chunk, you know it, and you can ask the other side to retransmit, or the server to give you, that chunk number (or its offset).
+
+
+2. Implement forward secrecy as follows:
+
+`[ pre-header (177 bytes): 24-byte nonce + 1-byte PreheaderType + (usually) 4 32-byte keys (see below) + 16-byte secretbox overhead + 64-byte Blake2b hash(?) ]`
+
+```
+[
+  4 keys: sender's ephemeral Ed25519 (or Curve25519???) pubkey (to convert to Curve25519 pubkey to then do ECDH with to derive symmetric key used to decrypt the rest)
+  ||
+  a currently-unused ephemeral pubkey from the sender that a reply should be encrypted against(?) ((Put this in a different message, namely of Message Type #20))
+  ||
+  decoded account ID (Ed25519) pubkey of sender (so you know who to reply to) ((No, put this in the symmetrically-encrypted part so the sender's ID is protected in the case of the recipient's private key being compromised in the future!))
+  ||
+  an invite key (to show the server in your reply, so you have permission to message me) ((Shouldn't they already have this?  Plus, don't put this in every message!))
+  ||
+  ID of the thing this chunk pertains to... unless that should be in the control message?  Either way, ID == Blake2b(miniLeapFile[:24])[:64].  Then I can chat with you while sending you a large file.
+]
+```
+
+Note that if you want the message to be decryptable later (which PFS makes impossible), just encrypt it to a long-term key rather than an ephemeral one!
+
+((What you actually need from me is: my account ID, my ephemeral Curve25519 pubkey for you to encrypt to, and .  The blob ID can be calculated from the nonce used in the pre-header.))
+
+
+3. Post-PFS control messages: The server is still told, and still tells the recipient, whether `ephemeral: true` is the case.  But sending is now done anonymously (through a separate connection?), and the server tells the recipient which account ID the next binary message (yay `MessagePair`s) is meant for, so you can be logged into many accounts at once (and even log in and out dynamically, without disconnecting -- great for group chats where everyone shares an identity!).  The server also tells us which invite key this user used to message us.  (Then we can keep track of that and tell the people we don't want to leave behind (when we burn an account) about our new invite secret.)
+
+
+4. Add the option of encrypting control messages to the server's public key!  And the option of encrypting control messages from the server to the client's first account they logged in with.
+
+5. Which public key should I encrypt to (and use with my ephemeral private key for ECDH)?  Priority -- (1) pre-key, (2) invite key, (3) their long-term key.
+
+6. Can I do away with pre-keys altogether by simply sending my first message to you from an ephemeral account?
+
+7. Let users store up to 8 
+  - If it's unlimited then we start leaking how many people we're chatting with
+
+8. Consider making the key ID the _hash_ of the public key, not the public key itself!  Then when an attacker steals your private key and decrypts the first message I sent you, and then uses your private key to decrypt the pre-header, the attacker merely gets the _hash_ of your ephemeral public key, not the key itself, and thus they cannot decrypt the remaining chunks!
 
 
 ## FAQ
