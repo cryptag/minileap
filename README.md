@@ -7,6 +7,9 @@ without the complexity of libsodium 1.0.14+'s secretstream.
 
 #### Design
 
+(TODO: Update this section to talk about converting from Ed25519
+signing keypairs to Curve25519 keypairs inside `convert.go`.)
+
 All data is encrypted using libsodium's SecretBox.  Each chunk
 consists of a 24-byte nonce followed by data encrypted using the same
 symmetric key, which is created by seeding with the private half of a
@@ -160,8 +163,6 @@ None!  K.I.S.S.
 ```
 
 Note that if you want the message to be decryptable later (which PFS makes impossible), just encrypt it to a long-term key rather than an ephemeral one!
-
-((What you actually need from me is: my account ID, my ephemeral Curve25519 pubkey for you to encrypt to, and .  The blob ID can be calculated from the nonce used in the pre-header.))
 
 
 3. Post-PFS control messages: The server is still told, and still tells the recipient, whether `ephemeral: true` is the case.  But sending is now done anonymously (through a separate connection?), and the server tells the recipient which account ID the next binary message (yay `MessagePair`s) is meant for, so you can be logged into many accounts at once (and even log in and out dynamically, without disconnecting -- great for group chats where everyone shares an identity!).  The server also tells us which invite key this user used to message us.  (Then we can keep track of that and tell the people we don't want to leave behind (when we burn an account) about our new invite secret.)
