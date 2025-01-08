@@ -1,6 +1,7 @@
 package minileap
 
 import (
+	"bytes"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -128,21 +129,27 @@ func DecryptFile(cipherFilename string, key *[32]byte, dest string, forceOverwri
 	return config, nil
 }
 
-// DecryptReaderToWriter performs streaming decryption on cipherFile
-// using key and writes the decrypted result to plainFile.
-// config.OrigFilename will be non-empty if cipherFile is of type
-// MessageTypeFileWithFilename. config may be non-nil even in the case
-// of an error in order to relay potentially-relevant information to
-// the caller. If blake is nil this means we are decrypting the first
-// chunk in a miniLeap file, and a new Blake2b hasher will be created
-// and used. Callers who receive err == ErrNotLastChunk should use
-// config.Blake do call this function again to decrypt subsequent
-// chunks until err == nil is returned. If plainFile == nil, plainFile
-// will be set to os.Stdout unless cipherFile turns out to be a
-// miniLeap message of type MessageTypeFileWithFilename, in which case
-// a new file with that name will be created with os.Create() and the
-// resulting *os.File will be stored in the `plainFile` variable and
-// have the decrypted data written to it.
+// DecryptReaderToWriter performs streaming decryption on `cipherFile`
+// using `key` and writes the decrypted result to `config.PlainFile`.
+// `config.OrigFilename` will be non-empty if cipherFile is of type
+// `MessageTypeFileWithFilename`. `config` may be non-nil even in the
+// case of an error in order to relay potentially-relevant information
+// to the caller (particularly when `err == ErrNotLastChunk`). If
+// `blake == nil` this means we are decrypting the first chunk in a
+// miniLeap file, and a new Blake2b hasher will be created and
+// used. Callers who receive `err == ErrNotLastChunk` should use
+// `config.Blake` to call this function again to decrypt subsequent
+// chunks until `err == nil` is returned.
+//
+// If `encConfig.PlainFile == nil` and we are decrypting a miniLeap
+// message of type `MessageTypeFileWithFilename`, the resulting
+// `*os.File` will be stored in `config.PlainFile` and have the
+// decrypted file contents written to it.
+//
+// If `encConfig.PlainFile == nil` and it turns out we are not
+// decrypting a file, this function will set `config.PlainFile` equal
+// to a new `*bytes.Buffer` and write decrypted contents to it (e.g.,
+// a chat message).
 func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *EncryptionConfig) (config *EncryptionConfig, err error) {
 	if key == nil || *key == empty32ByteArray {
 		return nil, ErrInvalidKey
@@ -152,12 +159,21 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *Encry
 		encConfig = &EncryptionConfig{}
 	}
 	blake := encConfig.Blake
-	plainFile := encConfig.PlainFile
 
-	config = &EncryptionConfig{}
+	// Assume for now that we are not decrypting the first chunk, so
+	// copy these fields, which may or may not be empty:
+	config = &EncryptionConfig{
+		// BlobID:       encConfig.BlobID,
+		MsgType:      encConfig.MsgType,
+		OrigFilename: encConfig.OrigFilename,
+		PlainFile:    encConfig.PlainFile,
+	}
 
-	// If we are currently decrypting the first chunk...
+	// ...but if we _are_ currently decrypting the first chunk:
 	if blake == nil {
+		// Will be overridden below if it should be
+		config.PlainFile = &bytes.Buffer{}
+
 		var err error
 
 		// Set global-ish var
@@ -241,101 +257,89 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *Encry
 			// Set global-ish var
 			config.OrigFilename = decryptedFilename
 
-			// Set plainFile
-			if plainFile == nil {
-				// Goal: if `./${decryptedFilename}` does not exists,
-				// create plainFile there, otherwise do kind of like
-				// what Windows does and add `-1` right before the
-				// file extension, or `-2`, etc.
+			// Overwrite `config.PlainFile`
 
-				exists, _ := FileExists(decryptedFilename)
-				if !exists {
-					// Happy case: we don't have to fuck around with
-					// adding a numerical suffix to
-					// `decryptedFilename`; just use it directly to
-					// create `plainFile` at that location
+			// Goal: if `./${decryptedFilename}` does not exists,
+			// create config.PlainFile there, otherwise do kind of like
+			// what Windows does and add `-1` right before the
+			// file extension, or `-2`, etc.
 
-					// Set global-ish var
-					plainFile, err = os.Create(decryptedFilename)
-					if err != nil {
-						return nil, fmt.Errorf("Error creating `%s` -- %w",
-							decryptedFilename, err)
-					}
-					// `plainFile.Close()` is called below
+			exists, _ := FileExists(decryptedFilename)
+			if !exists {
+				// Happy case: we don't have to fuck around with
+				// adding a numerical suffix to
+				// `decryptedFilename`; just use it directly to
+				// create `config.PlainFile` at that location
 
-				} else {
-					// assert exists == true
-					plainFilenamePrefix := decryptedFilename
-					ndx := strings.LastIndex(plainFilenamePrefix, ".")
-					origNdx := ndx
-					if ndx == -1 {
-						// Removed below
-						plainFilenamePrefix = decryptedFilename + "."
-						ndx = strings.LastIndex(plainFilenamePrefix, ".")
-					}
-
-					suffixNum := 0
-					var plainFilename string
-					for exists {
-						suffixNum++
-						plainFilename = fmt.Sprintf("%v-%d.%v",
-							plainFilenamePrefix[:ndx],
-							suffixNum,
-							plainFilenamePrefix[ndx+1:],
-						)
-
-						// Trim off trailing "." if there is one
-						if origNdx == -1 && strings.HasSuffix(plainFilename, ".") {
-							plainFilename = plainFilename[:len(plainFilename)-1]
-						}
-
-						exists, _ = FileExists(plainFilename)
-					}
-
-					// Finally got a non-existent file with a suitable name!
-
-					// TODO: Make destination dir configurable;
-					// implicitly defaults to ".", sitting right next
-					// to the `onionpush` binary.
-
-					// Set global-ish var
-					plainFile, err = os.Create(plainFilename)
-					if err != nil {
-						return nil, fmt.Errorf("Error creating `%s` -- %w",
-							plainFilename, err)
-					}
-					// `plainFile.Close()` is called below
-
-					config.OrigFilename = plainFilename
-
-					// FALL THROUGH
+				// Set global-ish var
+				config.PlainFile, err = os.Create(decryptedFilename)
+				if err != nil {
+					return nil, fmt.Errorf("Error creating `%s` -- %w",
+						decryptedFilename, err)
 				}
+				// `config.PlainFile.Close()` is called below
+
+			} else {
+				// assert exists == true
+				plainFilenamePrefix := decryptedFilename
+				ndx := strings.LastIndex(plainFilenamePrefix, ".")
+				origNdx := ndx
+				if ndx == -1 {
+					// Removed below
+					plainFilenamePrefix = decryptedFilename + "."
+					ndx = strings.LastIndex(plainFilenamePrefix, ".")
+				}
+
+				suffixNum := 0
+				var plainFilename string
+				for exists {
+					suffixNum++
+					plainFilename = fmt.Sprintf("%v-%d.%v",
+						plainFilenamePrefix[:ndx],
+						suffixNum,
+						plainFilenamePrefix[ndx+1:],
+					)
+
+					// Trim off trailing "." if there is one
+					if origNdx == -1 && strings.HasSuffix(plainFilename, ".") {
+						plainFilename = plainFilename[:len(plainFilename)-1]
+					}
+
+					exists, _ = FileExists(plainFilename)
+				}
+
+				// Finally got a non-existent file with a suitable name!
+
+				// TODO: Make destination dir configurable;
+				// implicitly defaults to ".", sitting right next
+				// to the `relay` binary.
+
+				// Set global-ish var
+				config.PlainFile, err = os.Create(plainFilename)
+				if err != nil {
+					return nil, fmt.Errorf("Error creating `%s` -- %w",
+						plainFilename, err)
+				}
+				// `config.PlainFile.Close()` is called below
+
+				config.OrigFilename = plainFilename
+
+				// FALL THROUGH
 			}
-
-			config.PlainFile = plainFile
-
-			// FALL THROUGH
 		}
 
 		// Header fully verified :ok_hand:
 		log.Debugf("Header chunk: Successfully decrypted, verified, and parsed %s",
 			MessageTypeName(msgType))
-	} else {
-		// This is not the first chunk, so copy these fields, which
-		// may or may not be empty:
-		config.OrigFilename = encConfig.OrigFilename
-		config.MsgType = encConfig.MsgType
 	}
+
+	log.Debugf("Writing to config.PlainFile of type %T", config.PlainFile)
 
 	// assert config.MsgType != 0
 
 	// if config.MsgType == MessageTypeFileWithFilename {
 	//     assert config.OrigFilename != ""
 	// }
-
-	if plainFile == nil {
-		plainFile = os.Stdout
-	}
 
 	//
 	// Decrypt and verify data chunks
@@ -344,7 +348,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *Encry
 	var n int
 	isLastChunk := false
 	noncePlusEncryptedChunkPlusHash := make([]byte, EncryptChunkLength+DecryptChunkOverhead)
-	for true {
+	for {
 		n, err = cipherFile.Read(noncePlusEncryptedChunkPlusHash)
 		if err != nil && err != io.EOF {
 			return config, err
@@ -367,7 +371,7 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *Encry
 
 		isLastChunk = IsLastChunkByte(isLastPlusDecryptedChunk[0])
 
-		_, err = plainFile.Write(isLastPlusDecryptedChunk[1:])
+		_, err = config.PlainFile.Write(isLastPlusDecryptedChunk[1:])
 		if err != nil {
 			return config, err
 		}
@@ -381,25 +385,20 @@ func DecryptReaderToWriter(cipherFile io.Reader, key *[32]byte, encConfig *Encry
 		log.Debugf("DecryptReaderToWriter: Returning without getting a last chunk; successfully decrypted everything else, though")
 
 		config.Blake = blake
-		if plainFile != os.Stdout {
-			config.PlainFile = plainFile
-		}
 
 		return config, ErrNotLastChunk
 	}
 
+	// assert isLastChunk
+
 	// Close file opened to store decrypted contents
-	if plainFile, ok := plainFile.(*os.File); ok {
-		if plainFile == os.Stdout {
-			// Trailing newline
-			os.Stdout.Write([]byte("\n"))
-		} else {
-			// TODO: Handle error(?)
-			_ = plainFile.Close()
-		}
+	if plainFile, ok := config.PlainFile.(*os.File); ok && plainFile != os.Stdout {
+		// TODO: Handle error(?)
+		_ = plainFile.Close()
 	}
 
 	log.Debugf("DecryptReaderToWriter: Successfully decrypted and wrote last chunk; total success")
+
 	return config, nil
 }
 

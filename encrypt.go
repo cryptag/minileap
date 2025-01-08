@@ -121,11 +121,16 @@ var (
 )
 
 type EncryptionConfig struct {
-	OrigFilename  string
+	NoncePrefix []byte // {:constraints [ $(v.len in [0 12 18]) ]}
+
+	// These fields are in common with `minileap.Message`
+	BlobID        BlobID
 	MsgType       uint16
-	Blake         hash.Hash
-	PlainFile     io.Writer
+	OrigFilename  string
 	SavedLocation string
+
+	PlainFile io.Writer
+	Blake     hash.Hash
 }
 
 func (config *EncryptionConfig) SavedAs() string {
@@ -182,7 +187,14 @@ func EncryptFile(plainFilename string, key *[32]byte, dest string, forceOverwrit
 	}
 	defer cipherFile.Close()
 
+	headerNoncePrefix, blobID, err := NewBlob()
+	if err != nil {
+		return cipherFilename, err
+	}
+
 	encConfig := &EncryptionConfig{
+		NoncePrefix:  headerNoncePrefix[:],
+		BlobID:       blobID,
 		OrigFilename: filepath.Base(plainFilename),
 		MsgType:      MessageTypeFileWithFilename,
 	}
@@ -205,6 +217,14 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 			ErrInvalidEncryptConfig)
 	}
 
+	// if encConfig == nil {
+	// 	encConfig = &EncryptionConfig{}
+	// }
+
+	if err := ValidNoncePrefix(encConfig.NoncePrefix); err != nil {
+		return err
+	}
+
 	blake, err := blake2b.New512(nil)
 	if err != nil {
 		return err
@@ -218,15 +238,16 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 	if err != nil {
 		return err
 	}
-	noncePlusEncryptedHeaderPlusHash, err := EncryptAndHashChunk(header, key, blake)
+	noncePlusEncryptedHeaderPlusHash, err := EncryptAndHashChunk(encConfig.NoncePrefix, header, key, blake)
 	if err != nil {
 		return err
 	}
+	encConfig.NoncePrefix = nil
 
 	log.Debugf("EncryptReaderToWriter: header created, encrypted, and hashed successfully (though not yet written)")
 
-	// Write this below, for efficiency's sake, and to not reveal much
-	// about the structure of the files we're sending
+	// Write this below, both for efficiency's sake, and to not reveal
+	// much about the structure of the files we're sending
 	firstChunkEnc := noncePlusEncryptedHeaderPlusHash
 
 	//
@@ -239,7 +260,7 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 			return err
 		}
 
-		noncePlusFilename, err := EncryptAndHashChunk(filenameChunk, key, blake)
+		noncePlusFilename, err := EncryptAndHashChunk(encConfig.NoncePrefix, filenameChunk, key, blake)
 		if err != nil {
 			return err
 		}
@@ -260,7 +281,7 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 
 	// Closure helper ftw
 	encryptAndWriteStaged := func() error {
-		noncePlusEncryptedChunkPlusHash, err := EncryptAndHashChunk(staged, key, blake)
+		noncePlusEncryptedChunkPlusHash, err := EncryptAndHashChunk(encConfig.NoncePrefix, staged, key, blake)
 		if err != nil {
 			return err
 		}
@@ -286,7 +307,7 @@ func EncryptReaderToWriter(msgType uint16, plainFile io.Reader, key *[32]byte, c
 	}
 
 	// Loop till 0 bytes read. Fuck EOF, which only complicates things
-	for true {
+	for {
 		n, err := plainFile.Read(plainb[:])
 		if err != nil && err != io.EOF {
 			return err
@@ -395,7 +416,7 @@ func NewFilenameChunk(origFilename string) ([]byte, error) {
 // are encrypting a miniLeap header or filename, the first argument
 // should consist of the data you want to encrypt prefixed by an
 // "isLastChunk" byte.
-func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
+func EncryptAndHashChunk(noncePrefix []byte, isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]byte, blake hash.Hash) ([]byte, error) {
 	isLastChunkBytePlusPlainLen := len(isLastChunkBytePlusPlain)
 	if isLastChunkBytePlusPlainLen == 0 {
 		return nil, fmt.Errorf("Cannot encrypt empty chunk")
@@ -403,11 +424,17 @@ func EncryptAndHashChunk(isLastChunkBytePlusPlain []byte, key *[ValidKeyLength]b
 	if key == nil || *key == empty32ByteArray {
 		return nil, ErrInvalidKey
 	}
+	if err := ValidNoncePrefix(noncePrefix); err != nil {
+		return nil, err
+	}
 
 	nonce, err := RandomNonce()
 	if err != nil {
 		return nil, fmt.Errorf("Error generating nonce: %s", err)
 	}
+	// Overwrite beginning of `nonce` with (potentially empty) `noncePrefix`
+	copy((*nonce)[:], noncePrefix)
+
 	nonceSlice := (*nonce)[:]
 
 	cipherCapacity := isLastChunkBytePlusPlainLen + NonceCryptoBlakeOverhead
